@@ -1,0 +1,49 @@
+name: Release
+
+"on":
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Lua
+        run: sudo apt-get update && sudo apt-get install -y lua5.1
+
+      - name: Verify tag matches version.txt
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          version="$(tr -d '\n' < version.txt)"
+          test "$tag" = "$version"
+
+      - name: Build release installers
+        env:
+          UPDATE_URL: https://github.com/${{ github.repository }}/releases/latest/download/update.json
+        run: |
+          python3 installers/build.py --update-url "$UPDATE_URL"
+          LUAC=luac5.1 make check UPDATE_URL="$UPDATE_URL"
+
+      - name: Generate update manifest
+        run: python3 installers/release_manifest.py --repo "$GITHUB_REPOSITORY"
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            dist/install-client.lua
+            dist/install-switch.lua
+            dist/install-dimmer.lua
+            dist/install-all.lua
+            dist/update.json

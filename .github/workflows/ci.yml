@@ -1,0 +1,28 @@
+name: CI
+
+"on":
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Lua
+        run: sudo apt-get update && sudo apt-get install -y lua5.1
+
+      - name: Build installers
+        run: make build
+
+      - name: Ensure generated installers are committed
+        run: git diff --exit-code -- dist
+
+      - name: Check
+        env:
+          LUAC: luac5.1
+        run: make check
