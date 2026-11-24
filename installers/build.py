@@ -14,7 +14,6 @@ and only download Basalt itself (once) on the ComputerCraft computer.
 from __future__ import annotations
 
 import argparse
-import os
 import re
 import sys
 from pathlib import Path
@@ -22,8 +21,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 DIST_DIR = ROOT / "dist"
 VERSION = (ROOT / "version.txt").read_text(encoding="utf-8").strip()
-if not re.fullmatch(r"\d+(?:\.\d+){1,3}", VERSION):
-    raise SystemExit("version.txt must look like 1.2.3")
+CHANNEL_CHOICES = ("stable", "nightly")
 
 BASALT_VERSION = "basalt-1.7.0.lua"
 BASALT_URL = (
@@ -264,7 +262,11 @@ def long_string(content: str) -> str:
     return f"[{equals}[{content}]{equals}]"
 
 
-def render(name: str, update_url: str = "") -> tuple[str, str]:
+def valid_version(value: str) -> bool:
+    return bool(re.fullmatch(r"\d+(?:\.\d+){1,3}", value))
+
+
+def render(name: str, version: str = VERSION, channel: str = "stable") -> tuple[str, str]:
     target = TARGETS[name]
     files: dict[str, str] = target["files"]  # type: ignore[assignment]
 
@@ -277,8 +279,10 @@ def render(name: str, update_url: str = "") -> tuple[str, str]:
 
     # Generated metadata used by the updater. It is written by the installer
     # alongside the program files.
-    contents["/ha/version"] = VERSION + "\n"
-    contents["/ha/update.url"] = update_url.strip() + "\n"
+    if not valid_version(version):
+        raise SystemExit("version must look like 1.2.3 or 1.2.3.4")
+    contents["/ha/version"] = version + "\n"
+    contents["/ha/channel"] = channel + "\n"
 
     entries: list[str] = []
     for install_path in sorted(contents):
@@ -303,10 +307,12 @@ def selected_targets(requested: list[str]) -> list[str]:
     return requested or list(TARGETS)
 
 
-def check_names(names: list[str], update_url: str = "") -> int:
+def check_names(
+    names: list[str], version: str = VERSION, channel: str = "stable"
+) -> int:
     stale: list[str] = []
     for name in names:
-        output_name, script = render(name, update_url)
+        output_name, script = render(name, version, channel)
         path = DIST_DIR / output_name
         if not path.exists():
             stale.append(f"missing {path.relative_to(ROOT)}")
@@ -323,10 +329,10 @@ def check_names(names: list[str], update_url: str = "") -> int:
     return 0
 
 
-def build(names: list[str], update_url: str = "") -> int:
+def build(names: list[str], version: str = VERSION, channel: str = "stable") -> int:
     DIST_DIR.mkdir(parents=True, exist_ok=True)
     for name in names:
-        output_name, script = render(name, update_url)
+        output_name, script = render(name, version, channel)
         path = DIST_DIR / output_name
         with path.open("w", encoding="utf-8", newline="\n") as handle:
             handle.write(script)
@@ -350,18 +356,26 @@ def main(argv: list[str] | None = None) -> int:
         help="verify that dist/install-*.lua is current instead of writing",
     )
     parser.add_argument(
-        "--update-url",
-        default=os.environ.get("HA_UPDATE_URL", ""),
-        help="update manifest URL baked into the installed /ha/update.url",
+        "--version",
+        default=VERSION,
+        help="version written to /ha/version (default: version.txt)",
+    )
+    parser.add_argument(
+        "--channel",
+        choices=CHANNEL_CHOICES,
+        default="stable",
+        help="update channel written to /ha/channel",
     )
     args = parser.parse_args(argv)
+    if not valid_version(args.version):
+        parser.error("--version must look like 1.2.3 or 1.2.3.4")
     unknown = [name for name in args.targets if name not in TARGETS]
     if unknown:
         parser.error("unknown target(s): " + ", ".join(unknown))
     names = selected_targets(args.targets)
     if args.check:
-        return check_names(names, args.update_url)
-    return build(names, args.update_url)
+        return check_names(names, args.version, args.channel)
+    return build(names, args.version, args.channel)
 
 
 if __name__ == "__main__":

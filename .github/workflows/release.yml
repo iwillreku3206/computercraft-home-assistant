@@ -26,17 +26,15 @@ jobs:
           version="$(tr -d '\n' < version.txt)"
           test "$tag" = "$version"
 
-      - name: Build release installers
-        env:
-          UPDATE_URL: https://github.com/${{ github.repository }}/releases/latest/download/update.json
+      - name: Build stable installers
         run: |
-          python3 installers/build.py --update-url "$UPDATE_URL"
-          LUAC=luac5.1 make check UPDATE_URL="$UPDATE_URL"
+          python3 installers/build.py --channel stable
+          LUAC=luac5.1 make check CHANNEL=stable
 
-      - name: Generate update manifest
-        run: python3 installers/release_manifest.py --repo "$GITHUB_REPOSITORY"
+      - name: Generate stable update manifest
+        run: python3 installers/release_manifest.py --repo "$GITHUB_REPOSITORY" --channel stable
 
-      - name: Publish release
+      - name: Publish stable release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true

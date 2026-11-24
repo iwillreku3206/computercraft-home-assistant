@@ -1,28 +1,36 @@
 --[[
   updater.lua - update checking and installer execution.
 
-  The installed version is read from /ha/version. The manifest URL is read
-  from /ha/update.url, which release installers bake in, or can be overridden
-  by the client config.
+  Two channels:
 
-  Manifest format:
-    {
-      "version": "0.2.0",
-      "notes": "optional text",
-      "installers": {
-        "client": "https://.../install-client.lua",
-        "switch": "...",
-        "dimmer": "..."
-      }
-    }
+    stable  - latest GitHub release
+    nightly - the moving "nightly" prerelease built from main
+
+  The installed version is read from /ha/version, and the installed channel
+  from /ha/channel.
 ]]
 
 local ha = require("ha.lib.ha")
 
 local updater = {}
 
+local REPO = "https://github.com/iwillreku3206/computercraft-home-assistant"
+
+updater.CHANNEL_URLS = {
+  stable = REPO .. "/releases/latest/download/update.json",
+  nightly = REPO .. "/releases/download/nightly/update.json",
+}
+
 local function trim(value)
   return ha.trim(value or "")
+end
+
+local function normalizeChannel(value)
+  value = trim(value):lower()
+  if value == "nightly" then
+    return "nightly"
+  end
+  return "stable"
 end
 
 function updater.currentVersion()
@@ -34,8 +42,16 @@ function updater.currentVersion()
   return version
 end
 
-function updater.defaultUrl()
-  return trim(ha.readFile("/ha/update.url") or "")
+function updater.installedChannel()
+  return normalizeChannel(trim(ha.readFile("/ha/channel") or ""))
+end
+
+function updater.defaultChannel()
+  return updater.installedChannel()
+end
+
+function updater.manifestUrl(channel)
+  return updater.CHANNEL_URLS[normalizeChannel(channel)]
 end
 
 local function versionParts(value)
@@ -77,13 +93,16 @@ local function fetch(url)
   return data
 end
 
--- Returns { version, notes, installer, current, newer } or nil, error.
-function updater.check(url, target)
-  url = trim(url)
-  if url == "" then
-    return nil, "no update URL configured"
-  end
+-- Returns { channel, version, notes, installer, current,
+--           installedChannel, newer, switching } or nil, error.
+function updater.check(channel, target)
+  channel = normalizeChannel(channel)
   target = target or "client"
+
+  local url = updater.manifestUrl(channel)
+  if not url then
+    return nil, "unknown update channel"
+  end
 
   local body, err = fetch(url)
   if not body then
@@ -100,6 +119,8 @@ function updater.check(url, target)
     return nil, "manifest has no version"
   end
 
+  local manifestChannel = normalizeChannel(manifest.channel or channel)
+
   local installers = manifest.installers
   local installer
   if type(installers) == "table" then
@@ -111,12 +132,16 @@ function updater.check(url, target)
   installer = trim(installer or "")
 
   local current = updater.currentVersion()
+  local installedChannel = updater.installedChannel()
   return {
+    channel = manifestChannel,
     version = version,
     notes = type(manifest.notes) == "string" and manifest.notes or "",
     installer = installer,
     current = current,
+    installedChannel = installedChannel,
     newer = updater.compareVersions(version, current) > 0,
+    switching = manifestChannel ~= installedChannel,
   }
 end
 

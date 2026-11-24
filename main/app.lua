@@ -28,7 +28,7 @@ local function defaultConfig()
     channel = ha.DEFAULT_CHANNEL,
     sort = "name",
     gps = true,
-    updateUrl = ha.trim(ha.readFile("/ha/update.url") or ""),
+    updateChannel = updater.defaultChannel(),
     favorites = {},
     labels = {},
     filters = {
@@ -61,9 +61,8 @@ local function normalizeConfig()
     cfg.sort = "name"
   end
   cfg.gps = cfg.gps ~= false
-  cfg.updateUrl = ha.safeText(cfg.updateUrl or "", 200)
-  if cfg.updateUrl == "" then
-    cfg.updateUrl = updater.defaultUrl()
+  if cfg.updateChannel ~= "stable" and cfg.updateChannel ~= "nightly" then
+    cfg.updateChannel = updater.defaultChannel()
   end
 
   cfg.favorites = type(cfg.favorites) == "table" and cfg.favorites or {}
@@ -637,32 +636,26 @@ startUpdateCheck = function(manual)
   if updateState.checking or updateState.installing then
     return false
   end
-  if cfg.updateUrl == "" then
-    updateState.available = nil
-    updateState.latest = nil
-    updateState.error = "No update URL configured"
-    refreshUpdateUi()
-    if overlayScreen == "updates" or overlayScreen == "menu" then
-      defer(renderOverlay)
-    end
-    return false
-  end
 
   updateState.checking = true
   updateState.error = nil
   updateState.doneVersion = nil
   updateState.message = nil
+  updateState.latest = nil
+  updateState.available = nil
   refreshUpdateUi()
   if overlayScreen == "updates" or overlayScreen == "menu" then
     defer(renderOverlay)
   end
 
   basalt.schedule(function()
-    local info, err = updater.check(cfg.updateUrl, "client")
+    local info, err = updater.check(cfg.updateChannel, "client")
     updateState.checking = false
     if info then
       updateState.latest = info
-      updateState.available = (info.newer and info.installer ~= "") and info or nil
+      updateState.available = (
+        info.installer ~= "" and (info.newer or info.switching)
+      ) and info or nil
       updateState.error = nil
     else
       updateState.latest = nil
@@ -717,6 +710,11 @@ startUpdateInstall = function(info)
       updateState.available = nil
       updateState.latest = nil
       updateState.error = nil
+      if info.channel then
+        cfg.updateChannel = info.channel
+        markDirty()
+        saveNow()
+      end
       ha.log("updated to", info.version)
     else
       updateState.error = installErr or "Installer failed"
@@ -1957,7 +1955,7 @@ buildUpdatesScreen = function()
   panel:addLabel()
     :setPosition(1, 1)
     :setSize(W - 2, 1)
-    :setText("Installed version: " .. current)
+    :setText(ha.fit("Installed: " .. current .. " (" .. updater.installedChannel() .. ")", W - 2))
 
   local status
   if updateState.doneVersion then
@@ -1981,21 +1979,49 @@ buildUpdatesScreen = function()
     :setText(ha.fit(status, (W - 2) * 2))
     :setForeground(updateState.error and colors.red or colors.lightGray)
 
-  panel:addLabel():setPosition(1, 4):setSize(W - 2, 1):setText("Manifest URL")
-  local urlInput = panel:addInput()
-    :setPosition(1, 5)
-    :setSize(W - 2, 1)
-    :setInputLimit(200)
-    :setValue(cfg.updateUrl)
+  panel:addLabel():setPosition(1, 4):setSize(W - 2, 1):setText("Update channel")
 
-  local check = panel:addButton()
-    :setPosition(1, 7)
-    :setSize(W - 2, 1)
-    :setText("Save & check now")
-  check:onClick(function()
-    cfg.updateUrl = ha.safeText(urlInput:getValue(), 200)
+  local function selectChannel(channel)
+    if cfg.updateChannel == channel then
+      return
+    end
+    cfg.updateChannel = channel
     markDirty()
     saveNow()
+    updateState.doneVersion = nil
+    startUpdateCheck(true)
+    defer(renderOverlay)
+  end
+
+  local stable = panel:addButton()
+    :setPosition(1, 5)
+    :setSize(W - 2, 1)
+    :setText("Stable - latest release")
+  if cfg.updateChannel == "stable" then
+    stable:setBackground(colors.lime)
+    stable:setForeground(colors.black)
+  end
+  stable:onClick(function()
+    selectChannel("stable")
+  end)
+
+  local nightly = panel:addButton()
+    :setPosition(1, 6)
+    :setSize(W - 2, 1)
+    :setText("Nightly - main branch")
+  if cfg.updateChannel == "nightly" then
+    nightly:setBackground(colors.lime)
+    nightly:setForeground(colors.black)
+  end
+  nightly:onClick(function()
+    selectChannel("nightly")
+  end)
+
+  local check = panel:addButton()
+    :setPosition(1, 8)
+    :setSize(W - 2, 1)
+    :setText("Check now")
+  check:onClick(function()
     startUpdateCheck(true)
     defer(renderOverlay)
   end)
@@ -2005,20 +2031,20 @@ buildUpdatesScreen = function()
   if info then
     notes = info.notes or ""
     if notes == "" then
-      notes = "A newer version is available from the configured manifest."
+      notes = "A newer version is available."
     end
   elseif updateState.latest then
-    notes = "No newer release was found."
+    notes = "No newer " .. cfg.updateChannel .. " build was found."
   end
   panel:addLabel()
-    :setPosition(1, 9)
+    :setPosition(1, 10)
     :setSize(W - 2, 4)
     :setText(ha.fit(notes, (W - 2) * 4))
     :setForeground(colors.gray)
 
   if info and info.installer and info.installer ~= "" then
     local install = panel:addButton()
-      :setPosition(1, 14)
+      :setPosition(1, 15)
       :setSize(W - 2, 1)
       :setText("Install " .. info.version)
       :setBackground(colors.lime)
@@ -2029,9 +2055,9 @@ buildUpdatesScreen = function()
   end
 
   panel:addLabel()
-    :setPosition(1, 16)
-    :setSize(W - 2, 3)
-    :setText("Configs, pairings and labels are preserved.\nRestart the program after installing.")
+    :setPosition(1, 17)
+    :setSize(W - 2, 2)
+    :setText("Configs are preserved. Restart after installing.")
     :setForeground(colors.gray)
 end
 
@@ -2478,8 +2504,6 @@ basalt.onEvent(function(event, p1, p2, p3, p4, p5)
   end
 end)
 
-if cfg.updateUrl ~= "" then
-  startUpdateCheck(false)
-end
+startUpdateCheck(false)
 
 basalt.autoUpdate()

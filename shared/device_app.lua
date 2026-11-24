@@ -39,10 +39,6 @@ return function(spec)
   end
   cfg.pairingOpen = cfg.pairingOpen ~= false
   cfg.gps = cfg.gps ~= false
-  cfg.updateUrl = ha.safeText(cfg.updateUrl or "", 200)
-  if cfg.updateUrl == "" then
-    cfg.updateUrl = updater.defaultUrl()
-  end
   if not ha.validSide(cfg.side) then
     cfg.side = ha.sides()[1] or "top"
   end
@@ -615,7 +611,7 @@ return function(spec)
   end
 
   local function startUpdateCheck()
-    if updateState.checking or updateState.installing or cfg.updateUrl == "" then
+    if updateState.checking or updateState.installing then
       return
     end
     updateState.checking = true
@@ -623,7 +619,7 @@ return function(spec)
     updateState.error = nil
     refreshUpdateUi()
     basalt.schedule(function()
-      local info, err = updater.check(cfg.updateUrl, spec.kind)
+      local info, err = updater.check(updater.installedChannel(), spec.kind)
       updateState.checking = false
       if info then
         updateState.available = (info.newer and info.installer ~= "") and info or nil
@@ -735,8 +731,6 @@ return function(spec)
 
   updateMainUi()
   sendHello()
-  if cfg.updateUrl ~= "" then
-    startUpdateCheck()
-  end
+  startUpdateCheck()
   basalt.autoUpdate()
 end

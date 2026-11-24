@@ -97,10 +97,14 @@ applied only to `/basalt-ha.lua`.
 
 ### Option B: Host the generated installer
 
-If the files are available over HTTP, `wget run` works too:
+If HTTP access is available, release assets can be run directly:
 
 ```text
-wget run https://example.invalid/install-client.lua
+# Stable (default)
+wget run https://github.com/iwillreku3206/computercraft-home-assistant/releases/latest/download/install-client.lua
+
+# Nightly (main branch builds)
+wget run https://github.com/iwillreku3206/computercraft-home-assistant/releases/download/nightly/install-client.lua
 ```
 
 ### Rebuilding the installers
@@ -122,20 +126,36 @@ project URLs, only the pinned Basalt 1.7.0 URL.
 
 ### In-app updates
 
-Release installers bake the update manifest URL into `/ha/update.url`. On
-startup, the pocket client and device apps check that manifest (if configured).
-The client shows a green version button in the summary row when a newer
-release is available; devices show an update line and **Install** button on
-their main screen. Open **Setup > Updates** on the pocket to check, configure
-the manifest URL, or install an update. Installation downloads the matching
-release installer, runs it, and preserves configs; restart the program
-afterward.
+There are two update channels:
 
-The manifest is a JSON file:
+| Channel | Source | Default |
+|---|---|---|
+| Stable | latest GitHub release | yes |
+| Nightly | prerelease built from `main` on every push | no |
+
+The client and device apps check the selected channel on startup. The client
+shows a green version button in the summary row when an update is available;
+devices show an update line and **Install** button on their main screen.
+
+Open **Setup > Updates** on the pocket to switch between **Stable** and
+**Nightly**, check now, or install the available build. Installation downloads
+the matching release installer, runs it, and preserves configs; restart the
+program afterward.
+
+The updater uses these fixed manifests for
+`iwillreku3206/computercraft-home-assistant`:
+
+```text
+stable:  https://github.com/iwillreku3206/computercraft-home-assistant/releases/latest/download/update.json
+nightly: https://github.com/iwillreku3206/computercraft-home-assistant/releases/download/nightly/update.json
+```
+
+A manifest looks like:
 
 ```json
 {
   "version": "0.2.0",
+  "channel": "stable",
   "notes": "What changed",
   "installers": {
     "client": "https://.../install-client.lua",
@@ -145,18 +165,21 @@ The manifest is a JSON file:
 }
 ```
 
-The repository version lives in `version.txt`. Local builds have no baked
-manifest URL unless you pass one:
+`version.txt` contains the stable version. Builds default to the stable
+channel and that version:
 
 ```bash
-make build UPDATE_URL=https://example.invalid/update.json
+make build
 ```
 
-The release workflow builds with the repository's
-`releases/latest/download/update.json`, so released installers check
-automatically. Device apps use the baked URL; local device builds need
-`UPDATE_URL=...` at build time. The client can also be configured manually in
-**Setup > Updates**.
+Nightly builds override both:
+
+```bash
+make build CHANNEL=nightly VERSION=0.1.0.123
+```
+
+Device apps follow the channel they were installed from; use the stable or
+nightly installer on that device to change it.
 
 ### Updating an existing install
 
@@ -196,11 +219,15 @@ The workflows in `.github/workflows/` run:
 - **CI** on pushes and pull requests: build the installers, verify that the
   committed `dist/` output is current, and run `make check` with Lua 5.1.
 - **Release** on `v*` tags: verify the tag matches `version.txt`, build
-  installers with the update URL baked in, generate `update.json`, and attach
-  the installers plus manifest to the GitHub release.
+  stable installers, generate the stable `update.json`, and attach everything
+  to the GitHub release.
+- **Nightly** on pushes to `main`: build a nightly from the current `main`
+  checkout with a version like `0.1.0.<run-number>`, update the `nightly`
+  prerelease, and replace its installers/manifest.
 
-To publish an update, bump `version.txt`, rebuild/commit `dist/`, commit, and
-push a matching tag such as `v0.2.0`.
+To publish a stable update, bump `version.txt`, rebuild/commit `dist/`,
+commit, and push a matching tag such as `v0.2.0`. Nightly updates are
+automatic on pushes to `main`.
 
 ## First-run setup
 
@@ -231,6 +258,7 @@ screen contains:
 - **Sort & filters** — sort by name/distance, favorites-only, offline filter,
   and label filters.
 - **Network** — pocket name, network name, channel, GPS toggle.
+- **Updates** — choose Stable or Nightly, check, and install updates.
 - **Refresh GPS** — re-locates the pocket.
 
 The client keeps a separate `/ha/client.cfg` per pocket computer. Favorites,
@@ -401,13 +429,12 @@ the device even if the unpair message was lost; pair again to re-add it.
 ## Configuration files
 
 - `/ha/client.cfg` — client only: name, network, channel, sort, GPS,
-  update URL, favorites, labels, filters, paired devices, groups, last known
-  states.
+  update channel, favorites, labels, filters, paired devices, groups, last
+  known states.
 - `/ha/switch.cfg`, `/ha/dimmer.cfg` — device only: name, side, network,
-  channel, pairing-open flag, GPS flag, update URL, paired clients, last output
-  state.
+  channel, pairing-open flag, GPS flag, paired clients, last output state.
 - `/ha/cache/widgets/<hash>.lua` — cached widget scripts.
-- `/ha/version`, `/ha/update.url` — generated updater metadata, rewritten by
+- `/ha/version`, `/ha/channel` — generated updater metadata, rewritten by
   installers (not user config).
 
 Configs are written as Lua tables with `textutils.serialize`, so they can be

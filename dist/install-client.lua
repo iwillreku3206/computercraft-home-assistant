@@ -41,7 +41,7 @@ local function defaultConfig()
     channel = ha.DEFAULT_CHANNEL,
     sort = "name",
     gps = true,
-    updateUrl = ha.trim(ha.readFile("/ha/update.url") or ""),
+    updateChannel = updater.defaultChannel(),
     favorites = {},
     labels = {},
     filters = {
@@ -74,9 +74,8 @@ local function normalizeConfig()
     cfg.sort = "name"
   end
   cfg.gps = cfg.gps ~= false
-  cfg.updateUrl = ha.safeText(cfg.updateUrl or "", 200)
-  if cfg.updateUrl == "" then
-    cfg.updateUrl = updater.defaultUrl()
+  if cfg.updateChannel ~= "stable" and cfg.updateChannel ~= "nightly" then
+    cfg.updateChannel = updater.defaultChannel()
   end
 
   cfg.favorites = type(cfg.favorites) == "table" and cfg.favorites or {}
@@ -650,32 +649,26 @@ startUpdateCheck = function(manual)
   if updateState.checking or updateState.installing then
     return false
   end
-  if cfg.updateUrl == "" then
-    updateState.available = nil
-    updateState.latest = nil
-    updateState.error = "No update URL configured"
-    refreshUpdateUi()
-    if overlayScreen == "updates" or overlayScreen == "menu" then
-      defer(renderOverlay)
-    end
-    return false
-  end
 
   updateState.checking = true
   updateState.error = nil
   updateState.doneVersion = nil
   updateState.message = nil
+  updateState.latest = nil
+  updateState.available = nil
   refreshUpdateUi()
   if overlayScreen == "updates" or overlayScreen == "menu" then
     defer(renderOverlay)
   end
 
   basalt.schedule(function()
-    local info, err = updater.check(cfg.updateUrl, "client")
+    local info, err = updater.check(cfg.updateChannel, "client")
     updateState.checking = false
     if info then
       updateState.latest = info
-      updateState.available = (info.newer and info.installer ~= "") and info or nil
+      updateState.available = (
+        info.installer ~= "" and (info.newer or info.switching)
+      ) and info or nil
       updateState.error = nil
     else
       updateState.latest = nil
@@ -730,6 +723,11 @@ startUpdateInstall = function(info)
       updateState.available = nil
       updateState.latest = nil
       updateState.error = nil
+      if info.channel then
+        cfg.updateChannel = info.channel
+        markDirty()
+        saveNow()
+      end
       ha.log("updated to", info.version)
     else
       updateState.error = installErr or "Installer failed"
@@ -1970,7 +1968,7 @@ buildUpdatesScreen = function()
   panel:addLabel()
     :setPosition(1, 1)
     :setSize(W - 2, 1)
-    :setText("Installed version: " .. current)
+    :setText(ha.fit("Installed: " .. current .. " (" .. updater.installedChannel() .. ")", W - 2))
 
   local status
   if updateState.doneVersion then
@@ -1994,21 +1992,49 @@ buildUpdatesScreen = function()
     :setText(ha.fit(status, (W - 2) * 2))
     :setForeground(updateState.error and colors.red or colors.lightGray)
 
-  panel:addLabel():setPosition(1, 4):setSize(W - 2, 1):setText("Manifest URL")
-  local urlInput = panel:addInput()
-    :setPosition(1, 5)
-    :setSize(W - 2, 1)
-    :setInputLimit(200)
-    :setValue(cfg.updateUrl)
+  panel:addLabel():setPosition(1, 4):setSize(W - 2, 1):setText("Update channel")
 
-  local check = panel:addButton()
-    :setPosition(1, 7)
-    :setSize(W - 2, 1)
-    :setText("Save & check now")
-  check:onClick(function()
-    cfg.updateUrl = ha.safeText(urlInput:getValue(), 200)
+  local function selectChannel(channel)
+    if cfg.updateChannel == channel then
+      return
+    end
+    cfg.updateChannel = channel
     markDirty()
     saveNow()
+    updateState.doneVersion = nil
+    startUpdateCheck(true)
+    defer(renderOverlay)
+  end
+
+  local stable = panel:addButton()
+    :setPosition(1, 5)
+    :setSize(W - 2, 1)
+    :setText("Stable - latest release")
+  if cfg.updateChannel == "stable" then
+    stable:setBackground(colors.lime)
+    stable:setForeground(colors.black)
+  end
+  stable:onClick(function()
+    selectChannel("stable")
+  end)
+
+  local nightly = panel:addButton()
+    :setPosition(1, 6)
+    :setSize(W - 2, 1)
+    :setText("Nightly - main branch")
+  if cfg.updateChannel == "nightly" then
+    nightly:setBackground(colors.lime)
+    nightly:setForeground(colors.black)
+  end
+  nightly:onClick(function()
+    selectChannel("nightly")
+  end)
+
+  local check = panel:addButton()
+    :setPosition(1, 8)
+    :setSize(W - 2, 1)
+    :setText("Check now")
+  check:onClick(function()
     startUpdateCheck(true)
     defer(renderOverlay)
   end)
@@ -2018,20 +2044,20 @@ buildUpdatesScreen = function()
   if info then
     notes = info.notes or ""
     if notes == "" then
-      notes = "A newer version is available from the configured manifest."
+      notes = "A newer version is available."
     end
   elseif updateState.latest then
-    notes = "No newer release was found."
+    notes = "No newer " .. cfg.updateChannel .. " build was found."
   end
   panel:addLabel()
-    :setPosition(1, 9)
+    :setPosition(1, 10)
     :setSize(W - 2, 4)
     :setText(ha.fit(notes, (W - 2) * 4))
     :setForeground(colors.gray)
 
   if info and info.installer and info.installer ~= "" then
     local install = panel:addButton()
-      :setPosition(1, 14)
+      :setPosition(1, 15)
       :setSize(W - 2, 1)
       :setText("Install " .. info.version)
       :setBackground(colors.lime)
@@ -2042,9 +2068,9 @@ buildUpdatesScreen = function()
   end
 
   panel:addLabel()
-    :setPosition(1, 16)
-    :setSize(W - 2, 3)
-    :setText("Configs, pairings and labels are preserved.\nRestart the program after installing.")
+    :setPosition(1, 17)
+    :setSize(W - 2, 2)
+    :setText("Configs are preserved. Restart after installing.")
     :setForeground(colors.gray)
 end
 
@@ -2491,12 +2517,12 @@ basalt.onEvent(function(event, p1, p2, p3, p4, p5)
   end
 end)
 
-if cfg.updateUrl ~= "" then
-  startUpdateCheck(false)
-end
+startUpdateCheck(false)
 
 basalt.autoUpdate()
 ]=],
+  ["/ha/channel"] = [[stable
+]],
   ["/ha/lib/ha.lua"] = [=[--[[
   ha.lua - shared support for the ComputerCraft Home Assistant.
 
@@ -3296,28 +3322,36 @@ return ha
   ["/ha/lib/updater.lua"] = [=[--[[
   updater.lua - update checking and installer execution.
 
-  The installed version is read from /ha/version. The manifest URL is read
-  from /ha/update.url, which release installers bake in, or can be overridden
-  by the client config.
+  Two channels:
 
-  Manifest format:
-    {
-      "version": "0.2.0",
-      "notes": "optional text",
-      "installers": {
-        "client": "https://.../install-client.lua",
-        "switch": "...",
-        "dimmer": "..."
-      }
-    }
+    stable  - latest GitHub release
+    nightly - the moving "nightly" prerelease built from main
+
+  The installed version is read from /ha/version, and the installed channel
+  from /ha/channel.
 ]]
 
 local ha = require("ha.lib.ha")
 
 local updater = {}
 
+local REPO = "https://github.com/iwillreku3206/computercraft-home-assistant"
+
+updater.CHANNEL_URLS = {
+  stable = REPO .. "/releases/latest/download/update.json",
+  nightly = REPO .. "/releases/download/nightly/update.json",
+}
+
 local function trim(value)
   return ha.trim(value or "")
+end
+
+local function normalizeChannel(value)
+  value = trim(value):lower()
+  if value == "nightly" then
+    return "nightly"
+  end
+  return "stable"
 end
 
 function updater.currentVersion()
@@ -3329,8 +3363,16 @@ function updater.currentVersion()
   return version
 end
 
-function updater.defaultUrl()
-  return trim(ha.readFile("/ha/update.url") or "")
+function updater.installedChannel()
+  return normalizeChannel(trim(ha.readFile("/ha/channel") or ""))
+end
+
+function updater.defaultChannel()
+  return updater.installedChannel()
+end
+
+function updater.manifestUrl(channel)
+  return updater.CHANNEL_URLS[normalizeChannel(channel)]
 end
 
 local function versionParts(value)
@@ -3372,13 +3414,16 @@ local function fetch(url)
   return data
 end
 
--- Returns { version, notes, installer, current, newer } or nil, error.
-function updater.check(url, target)
-  url = trim(url)
-  if url == "" then
-    return nil, "no update URL configured"
-  end
+-- Returns { channel, version, notes, installer, current,
+--           installedChannel, newer, switching } or nil, error.
+function updater.check(channel, target)
+  channel = normalizeChannel(channel)
   target = target or "client"
+
+  local url = updater.manifestUrl(channel)
+  if not url then
+    return nil, "unknown update channel"
+  end
 
   local body, err = fetch(url)
   if not body then
@@ -3395,6 +3440,8 @@ function updater.check(url, target)
     return nil, "manifest has no version"
   end
 
+  local manifestChannel = normalizeChannel(manifest.channel or channel)
+
   local installers = manifest.installers
   local installer
   if type(installers) == "table" then
@@ -3406,12 +3453,16 @@ function updater.check(url, target)
   installer = trim(installer or "")
 
   local current = updater.currentVersion()
+  local installedChannel = updater.installedChannel()
   return {
+    channel = manifestChannel,
     version = version,
     notes = type(manifest.notes) == "string" and manifest.notes or "",
     installer = installer,
     current = current,
+    installedChannel = installedChannel,
     newer = updater.compareVersions(version, current) > 0,
+    switching = manifestChannel ~= installedChannel,
   }
 end
 
@@ -3676,8 +3727,6 @@ end
 
 return shell
 ]=],
-  ["/ha/update.url"] = [[
-]],
   ["/ha/version"] = [[0.1.0
 ]],
   ["/ha/widgets/dimmer.lua"] = [[-- Widget script sent by a dimmer device to the pocket computer.

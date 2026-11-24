@@ -113,6 +113,8 @@ run({
   end,
 })
 ]],
+  ["/ha/channel"] = [[stable
+]],
   ["/ha/lib/device_app.lua"] = [=[--[[
   device_app.lua - generic Basalt application used by the switch and dimmer
   device programs.
@@ -154,10 +156,6 @@ return function(spec)
   end
   cfg.pairingOpen = cfg.pairingOpen ~= false
   cfg.gps = cfg.gps ~= false
-  cfg.updateUrl = ha.safeText(cfg.updateUrl or "", 200)
-  if cfg.updateUrl == "" then
-    cfg.updateUrl = updater.defaultUrl()
-  end
   if not ha.validSide(cfg.side) then
     cfg.side = ha.sides()[1] or "top"
   end
@@ -730,7 +728,7 @@ return function(spec)
   end
 
   local function startUpdateCheck()
-    if updateState.checking or updateState.installing or cfg.updateUrl == "" then
+    if updateState.checking or updateState.installing then
       return
     end
     updateState.checking = true
@@ -738,7 +736,7 @@ return function(spec)
     updateState.error = nil
     refreshUpdateUi()
     basalt.schedule(function()
-      local info, err = updater.check(cfg.updateUrl, spec.kind)
+      local info, err = updater.check(updater.installedChannel(), spec.kind)
       updateState.checking = false
       if info then
         updateState.available = (info.newer and info.installer ~= "") and info or nil
@@ -850,9 +848,7 @@ return function(spec)
 
   updateMainUi()
   sendHello()
-  if cfg.updateUrl ~= "" then
-    startUpdateCheck()
-  end
+  startUpdateCheck()
   basalt.autoUpdate()
 end
 ]=],
@@ -1655,28 +1651,36 @@ return ha
   ["/ha/lib/updater.lua"] = [=[--[[
   updater.lua - update checking and installer execution.
 
-  The installed version is read from /ha/version. The manifest URL is read
-  from /ha/update.url, which release installers bake in, or can be overridden
-  by the client config.
+  Two channels:
 
-  Manifest format:
-    {
-      "version": "0.2.0",
-      "notes": "optional text",
-      "installers": {
-        "client": "https://.../install-client.lua",
-        "switch": "...",
-        "dimmer": "..."
-      }
-    }
+    stable  - latest GitHub release
+    nightly - the moving "nightly" prerelease built from main
+
+  The installed version is read from /ha/version, and the installed channel
+  from /ha/channel.
 ]]
 
 local ha = require("ha.lib.ha")
 
 local updater = {}
 
+local REPO = "https://github.com/iwillreku3206/computercraft-home-assistant"
+
+updater.CHANNEL_URLS = {
+  stable = REPO .. "/releases/latest/download/update.json",
+  nightly = REPO .. "/releases/download/nightly/update.json",
+}
+
 local function trim(value)
   return ha.trim(value or "")
+end
+
+local function normalizeChannel(value)
+  value = trim(value):lower()
+  if value == "nightly" then
+    return "nightly"
+  end
+  return "stable"
 end
 
 function updater.currentVersion()
@@ -1688,8 +1692,16 @@ function updater.currentVersion()
   return version
 end
 
-function updater.defaultUrl()
-  return trim(ha.readFile("/ha/update.url") or "")
+function updater.installedChannel()
+  return normalizeChannel(trim(ha.readFile("/ha/channel") or ""))
+end
+
+function updater.defaultChannel()
+  return updater.installedChannel()
+end
+
+function updater.manifestUrl(channel)
+  return updater.CHANNEL_URLS[normalizeChannel(channel)]
 end
 
 local function versionParts(value)
@@ -1731,13 +1743,16 @@ local function fetch(url)
   return data
 end
 
--- Returns { version, notes, installer, current, newer } or nil, error.
-function updater.check(url, target)
-  url = trim(url)
-  if url == "" then
-    return nil, "no update URL configured"
-  end
+-- Returns { channel, version, notes, installer, current,
+--           installedChannel, newer, switching } or nil, error.
+function updater.check(channel, target)
+  channel = normalizeChannel(channel)
   target = target or "client"
+
+  local url = updater.manifestUrl(channel)
+  if not url then
+    return nil, "unknown update channel"
+  end
 
   local body, err = fetch(url)
   if not body then
@@ -1754,6 +1769,8 @@ function updater.check(url, target)
     return nil, "manifest has no version"
   end
 
+  local manifestChannel = normalizeChannel(manifest.channel or channel)
+
   local installers = manifest.installers
   local installer
   if type(installers) == "table" then
@@ -1765,12 +1782,16 @@ function updater.check(url, target)
   installer = trim(installer or "")
 
   local current = updater.currentVersion()
+  local installedChannel = updater.installedChannel()
   return {
+    channel = manifestChannel,
     version = version,
     notes = type(manifest.notes) == "string" and manifest.notes or "",
     installer = installer,
     current = current,
+    installedChannel = installedChannel,
     newer = updater.compareVersions(version, current) > 0,
+    switching = manifestChannel ~= installedChannel,
   }
 end
 
@@ -1828,8 +1849,6 @@ end
 
 return updater
 ]=],
-  ["/ha/update.url"] = [[
-]],
   ["/ha/version"] = [[0.1.0
 ]],
   ["/ha/widgets/dimmer.lua"] = [[-- Widget script sent by a dimmer device to the pocket computer.

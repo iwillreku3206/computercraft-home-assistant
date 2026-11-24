@@ -17,6 +17,13 @@ def main() -> int:
     parser.add_argument("--repo", required=True, help="GitHub owner/repository")
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument(
+        "--version",
+        default=(ROOT / "version.txt").read_text(encoding="utf-8").strip(),
+    )
+    parser.add_argument(
+        "--channel", choices=("stable", "nightly"), default="stable"
+    )
+    parser.add_argument(
         "--notes",
         default="Home Assistant update. See the GitHub release notes for details.",
     )
@@ -24,12 +31,18 @@ def main() -> int:
 
     if not re.fullmatch(r"[^/]+/[^/]+", args.repo):
         parser.error("--repo must look like owner/repository")
+    version = args.version.strip()
+    if not re.fullmatch(r"\d+(?:\.\d+){1,3}", version):
+        parser.error("version must look like 1.2.3 or 1.2.3.4")
 
-    version = (ROOT / "version.txt").read_text(encoding="utf-8").strip()
-    base = f"https://github.com/{args.repo}/releases/latest/download"
+    if args.channel == "nightly":
+        base = f"https://github.com/{args.repo}/releases/download/nightly"
+    else:
+        base = f"https://github.com/{args.repo}/releases/latest/download"
 
     manifest = {
         "version": version,
+        "channel": args.channel,
         "notes": args.notes,
         "installers": {
             "client": f"{base}/install-client.lua",

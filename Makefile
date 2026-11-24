@@ -1,9 +1,10 @@
 PYTHON ?= python3
 LUAC ?= luac
 TARGETS ?=
-UPDATE_URL ?=
+CHANNEL ?= stable
+VERSION ?=
 
-BUILD_ARGS := $(if $(UPDATE_URL),--update-url "$(UPDATE_URL)")
+BUILD_ARGS := --channel "$(CHANNEL)" $(if $(VERSION),--version "$(VERSION)")
 LUA_SOURCES := $(wildcard shared/*.lua main/*.lua switch/*.lua dimmer/*.lua group/*.lua)
 
 .DEFAULT_GOAL := all
@@ -37,7 +38,7 @@ clean:
 
 help:
 	@echo "make build         regenerate dist/install-*.lua (TARGETS=client|switch|dimmer|all)"
-	@echo "                   optional UPDATE_URL=<manifest-url> bakes the updater URL"
+	@echo "                   CHANNEL=stable|nightly and VERSION=<x.y.z> set metadata"
 	@echo "make check         verify generated installers are current and syntax-check everything"
 	@echo "make syntax        syntax-check build.py, Lua sources and generated installers"
 	@echo "make clean         remove generated installers and Python caches"

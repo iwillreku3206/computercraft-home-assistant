@@ -1,0 +1,60 @@
+name: Nightly
+
+"on":
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nightly
+  cancel-in-progress: true
+
+jobs:
+  nightly:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Lua
+        run: sudo apt-get update && sudo apt-get install -y lua5.1
+
+      - name: Compute nightly version
+        run: |
+          echo "NIGHTLY_VERSION=$(tr -d '\n' < version.txt).${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
+
+      - name: Build nightly installers
+        run: |
+          python3 installers/build.py --channel nightly --version "$NIGHTLY_VERSION"
+          LUAC=luac5.1 make check CHANNEL=nightly VERSION="$NIGHTLY_VERSION"
+
+      - name: Generate nightly manifest
+        run: |
+          python3 installers/release_manifest.py \
+            --repo "$GITHUB_REPOSITORY" \
+            --channel nightly \
+            --version "$NIGHTLY_VERSION"
+
+      - name: Publish nightly prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view nightly >/dev/null 2>&1 || \
+            gh release create nightly \
+              --prerelease \
+              --target main \
+              --title "Nightly" \
+              --notes "Automated nightly build from main."
+          gh release upload nightly \
+            dist/install-client.lua \
+            dist/install-switch.lua \
+            dist/install-dimmer.lua \
+            dist/install-all.lua \
+            dist/update.json \
+            --clobber

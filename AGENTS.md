@@ -28,20 +28,19 @@ requirement.
 | `Makefile` | — | Build/check entry point |
 | `installers/build.py` | — | Python generator for `dist/install-*.lua` |
 | `shared/updater.lua` | `/ha/lib/updater.lua` | Client and device update check/installer runner |
-| `version.txt` | `/ha/version` | Installed version used by the updater |
-| installer metadata | `/ha/update.url` | Manifest URL baked by the installer |
+| `version.txt` | `/ha/version` | Stable version used by the updater |
+| installer metadata | `/ha/channel` | Installed update channel |
 | `installers/release_manifest.py` | — | Generates release `update.json` |
 | `.github/workflows/ci.yml` | — | Build/check on pushes and PRs |
-| `.github/workflows/release.yml` | — | Tagged release + update manifest |
+| `.github/workflows/release.yml` | — | Stable tagged release + update manifest |
+| `.github/workflows/nightly.yml` | — | Nightly prerelease built from main |
 | `dist/install-*.lua` | — | Generated, Pastebin-ready installers |
 
 Config files are runtime state and must never be embedded in installers:
 
 - `/ha/client.cfg` — per-pocket name, network, channel, sort, filters,
-  favorites, labels, paired devices, groups, update URL, last known state.
-- `/ha/switch.cfg`, `/ha/dimmer.cfg` also store an update URL and are updated
-  with the same generated metadata.
-- `/ha/version`, `/ha/update.url` — generated update metadata. Do not treat
+  favorites, labels, paired devices, groups, update channel, last known state.
+- `/ha/version`, `/ha/channel` — generated update metadata. Do not treat
   these as user config; rebuilds/installers own them.
 - `/ha/switch.cfg`, `/ha/dimmer.cfg` — per-device name, side, network, channel,
   pairing-open flag, GPS flag, paired clients, last output state.
@@ -129,21 +128,23 @@ Config files are runtime state and must never be embedded in installers:
 
 ## Updater invariants
 
-- The client and device apps check the configured manifest on startup. Release
-  installers bake a stable `releases/latest/download/update.json` URL into
-  `/ha/update.url`.
-- Manifest versions are compared against `/ha/version`; bump `version.txt` for
-  releases. Do not hand-edit generated version metadata.
+- Two channels, default **stable**:
+  - stable: `https://github.com/iwillreku3206/computercraft-home-assistant/releases/latest/download/update.json`
+  - nightly: `https://github.com/iwillreku3206/computercraft-home-assistant/releases/download/nightly/update.json`
+- The client and device apps check the selected/installed channel on startup.
+  The client can switch channels in Setup > Updates; devices follow the
+  channel they were installed from.
+- Manifest versions are compared against `/ha/version`; nightly versions use
+  `version.txt` plus the GitHub run number. Installed channel comes from
+  `/ha/channel`. Do not hand-edit generated version/channel metadata.
 - Installation downloads the matching installer, executes it in a controlled
   environment, and requires a program restart. Installers must preserve client
   and device configs.
-- `make build` without `UPDATE_URL` must reproduce the committed `dist/`.
-  Release builds pass `UPDATE_URL=...`; CI verifies the default build.
-- Never auto-execute an update URL without the user choosing **Install** from
-  Setup > Updates on the client or the device's update button.
-- Local builds bake an empty update URL. Release installers get the stable
-  `releases/latest/download/update.json` URL; always rebuild `dist/` for the
-  default local build so CI's generated-output check stays clean.
+- Never auto-execute an update without the user choosing **Install** on the
+  client or the device.
+- `make build` defaults to `CHANNEL=stable` and the version in `version.txt`,
+  and must reproduce committed `dist/`. Release/nightly builds override
+  `CHANNEL` and usually `VERSION`.
 
 ## Widget contract
 
@@ -177,15 +178,16 @@ Run the full check (generated installers are current + Lua/Python syntax):
 make check
 ```
 
-Release builds bake the updater URL:
+Stable builds use the defaults; nightly builds override the metadata:
 
 ```bash
-make build UPDATE_URL=https://github.com/OWNER/REPO/releases/latest/download/update.json
-make check UPDATE_URL=https://github.com/OWNER/REPO/releases/latest/download/update.json
+make build CHANNEL=stable
+make build CHANNEL=nightly VERSION=0.1.0.123
 ```
 
-The workflows in `.github/workflows/` run CI on pushes/PRs and publish release
-assets on `v*` tags. `version.txt` must match the pushed tag (without `v`).
+The workflows run CI on pushes/PRs, publish stable assets on `v*` tags, and
+publish the moving `nightly` prerelease on pushes to `main`. `version.txt`
+must match a stable tag (without `v`).
 
 The root `Makefile` is the standard entry point. `make clean` removes
 generated installers; `dist/` is regenerated, never edited by hand.
