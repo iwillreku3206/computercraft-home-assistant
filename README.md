@@ -71,6 +71,17 @@ dimmer    # dimmer device
 `install-all.lua` installs the client and both device apps. Only the program you
 run on a computer matters; configs are created at runtime.
 
+At the end, the installer prompts for:
+
+- **Computer label** — blank leaves the current label unchanged.
+- **Startup program** — `1` = `ha`, `2` = `switch`, `3` = `dimmer`, `0` = leave
+  `/startup.lua` unchanged. Only installed apps are offered.
+
+The startup choice is inserted as a managed `shell.run(...)` block at the top
+of `/startup.lua`; existing startup content is preserved and the block is
+replaced safely on later installs. The menu is defined once in
+`installers/startup.lua` and embedded into every generated installer.
+
 Stable is the default channel. For the nightly build from `main`:
 
 ```text
@@ -211,7 +222,9 @@ To update manually:
 
 1. Run the relevant stable or nightly installer with `wget run` (or use
    **Setup > Updates** on the client).
-2. Stop the old app if it is still running (Ctrl+T) and start it again:
+2. The installer prompts for an optional new computer label and startup
+   program; blank label input and startup choice `0` leave them unchanged.
+3. Stop the old app if it is still running (Ctrl+T) and start it again:
    `ha`, `switch`, or `dimmer`.
 
 Choose the installer for what changed:

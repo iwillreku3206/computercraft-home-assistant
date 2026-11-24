@@ -5,7 +5,7 @@ CHANNEL ?= stable
 VERSION ?=
 
 BUILD_ARGS := --channel "$(CHANNEL)" $(if $(VERSION),--version "$(VERSION)")
-LUA_SOURCES := $(wildcard shared/*.lua main/*.lua switch/*.lua dimmer/*.lua group/*.lua)
+LUA_SOURCES := $(wildcard shared/*.lua main/*.lua switch/*.lua dimmer/*.lua group/*.lua) installers/startup.lua
 
 .DEFAULT_GOAL := all
 .PHONY: all build check syntax clean help

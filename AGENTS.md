@@ -30,6 +30,7 @@ requirement.
 | `shared/updater.lua` | `/ha/lib/updater.lua` | Client and device update check/installer runner |
 | `version.txt` | `/ha/version` | Stable version used by the updater |
 | installer metadata | `/ha/channel` | Installed update channel |
+| `installers/startup.lua` | — | Shared startup choices and installer prompt fragment |
 | `installers/release_manifest.py` | — | Generates release `update.json` |
 | `.github/workflows/ci.yml` | — | Build/check on pushes and PRs |
 | `.github/workflows/release.yml` | — | Stable tagged release + update manifest |
@@ -125,6 +126,20 @@ Config files are runtime state and must never be embedded in installers:
   order are turned on. That order is user-editable in the group editor;
   preserve it when saving and do not re-sort members alphabetically. The group
   target is authoritative while a device is in a group.
+
+## Installer startup prompt
+
+- `installers/startup.lua` is the single source for the post-install prompt and
+  the `1 = ha`, `2 = switch`, `3 = dimmer` startup choices. Generated
+  installers embed it; never duplicate the choices in `build.py`.
+- Offer only choices whose program file is present in the installer's `files`
+  table. Prompt for the computer label first; blank input must leave the label
+  unchanged.
+- Startup choice `0` leaves `/startup.lua` unchanged. Otherwise insert/replace
+  a single marked `shell.run(...)` block at the top while preserving all
+  existing startup lines. Make repeat installs idempotent.
+- If stdin is unavailable, leave both label and startup unchanged.
+- `make check` syntax-checks `installers/startup.lua` and the embedded result.
 
 ## Updater invariants
 

@@ -21,6 +21,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 DIST_DIR = ROOT / "dist"
 VERSION = (ROOT / "version.txt").read_text(encoding="utf-8").strip()
+STARTUP_CODE = (ROOT / "installers" / "startup.lua").read_text(encoding="utf-8")
 CHANNEL_CHOICES = ("stable", "nightly")
 
 BASALT_VERSION = "basalt-1.7.0.lua"
@@ -233,6 +234,7 @@ local function patchBasalt()
 end
 
 patchBasalt()
+@@STARTUP_CODE@@
 print("")
 print("Done. Run: " .. RUN_COMMAND)
 """
@@ -298,6 +300,7 @@ def render(name: str, version: str = VERSION, channel: str = "stable") -> tuple[
         .replace("@@BASALT_FALLBACK_QUOTED@@", lua_quote(BASALT_FALLBACK))
         .replace("@@RUN_COMMAND_QUOTED@@", lua_quote(str(target["run_command"])))
         .replace("@@FILES@@", "\n".join(entries))
+        .replace("@@STARTUP_CODE@@", STARTUP_CODE)
     )
     return output_name, script
 
