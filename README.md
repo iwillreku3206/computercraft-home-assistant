@@ -47,59 +47,41 @@ group/      grouped slider widget
 shared/     protocol/config/modem/GPS + generic device app
 Makefile    build/check entry point
 installers/ Python installer generator
-dist/       generated, pastebin-ready installers
+dist/       generated, self-contained installers
 ```
 
 ## Install
 
-### Option A: Pastebin (recommended)
+### Default: one command, all apps
 
-The files in `dist/` are self-contained installers. They embed all project
-sources; only Basalt is downloaded at install time.
-
-Upload `dist/install-client.lua` to Pastebin from your PC (or copy it onto a
-ComputerCraft computer and use `pastebin put install-client.lua`). Then run it
-on the target computer:
+On each ComputerCraft computer, install everything with:
 
 ```text
-pastebin run <paste id>
+wget run https://github.com/iwillreku3206/computercraft-home-assistant/releases/latest/download/install-all.lua
 ```
 
-The paste is self-contained, so `pastebin run` does not need any arguments.
-After it finishes:
+Then start the program for that computer:
 
 ```text
-ha
+ha        # pocket client
+switch    # switch device
+dimmer    # dimmer device
 ```
 
-Use different generated installers on different computers:
+`install-all.lua` installs the client and both device apps. Only the program you
+run on a computer matters; configs are created at runtime.
 
-| Installer | Installs |
-|---|---|
-| `dist/install-client.lua` | client + all bundled widget fallbacks |
-| `dist/install-switch.lua` | switch device |
-| `dist/install-dimmer.lua` | dimmer device |
-| `dist/install-all.lua` | client + both device apps (useful for testing) |
+Stable is the default channel. For the nightly build from `main`:
 
-The installer downloads Basalt 1.7.0 to `/basalt-ha.lua` (a private copy) if it
-is not already present. The apps prefer that file and fall back to `/basalt.lua`
-only if it is also version 1.7.0. This avoids breaking other Basalt programs on
-the same computer.
+```text
+wget run https://github.com/iwillreku3206/computercraft-home-assistant/releases/download/nightly/install-all.lua
+```
 
-The apps target Basalt 1.7.0's API. The 1.7.1 release is a property-system
-rewrite with an incompatible public API, so it is not used.
+### Individual installers
 
-The installer also applies two fixes to Basalt 1.7.0's minified `Slider`:
-`Slider.draw` references a position variable that the minifier dropped, and
-the click/drag handler compares absolute mouse coordinates against relative
-positions, so sliders below the first row cannot be clicked. Both fixes are
-applied only to `/basalt-ha.lua`.
+Use these when a computer should only receive one role.
 
-### Option B: `wget run` from GitHub Releases
-
-If HTTP access is available, release assets can be run directly.
-
-Stable (default, latest stable GitHub release):
+Stable (latest release):
 
 | Installer | URL |
 |---|---|
@@ -127,6 +109,20 @@ wget run https://github.com/iwillreku3206/computercraft-home-assistant/releases/
 wget run https://github.com/iwillreku3206/computercraft-home-assistant/releases/download/nightly/install-switch.lua
 ```
 
+The installer downloads Basalt 1.7.0 to `/basalt-ha.lua` (a private copy) if it
+is not already present. The apps prefer that file and fall back to `/basalt.lua`
+only if it is also version 1.7.0. This avoids breaking other Basalt programs on
+the same computer.
+
+The apps target Basalt 1.7.0's API. The 1.7.1 release is a property-system
+rewrite with an incompatible public API, so it is not used.
+
+The installer also applies two fixes to Basalt 1.7.0's minified `Slider`:
+`Slider.draw` references a position variable that the minifier dropped, and
+the click/drag handler compares absolute mouse coordinates against relative
+positions, so sliders below the first row cannot be clicked. Both fixes are
+applied only to `/basalt-ha.lua`.
+
 ### Rebuilding the installers
 
 The generator is a standalone Python 3 script with no third-party
@@ -141,8 +137,9 @@ python3 installers/build.py
 `make check` verifies that `dist/` is current and syntax-checks all Lua
 sources and generated installers. `make clean` removes generated installers.
 The generator reads the source folders and writes `dist/install-*.lua`. The
-generated files are safe to upload to Pastebin; they contain no external
-project URLs, only the pinned Basalt 1.7.0 URL.
+generated files are self-contained single-file installers and can be served
+from any HTTP host. They contain no external project URLs, only the pinned
+Basalt 1.7.0 URL.
 
 ### In-app updates
 
@@ -210,13 +207,11 @@ Installers only replace program files. They do not touch:
 - `/ha/cache/widgets/`
 - the downloaded `/basalt-ha.lua` when it is already 1.7.0
 
-To update:
+To update manually:
 
-1. Pull the latest sources.
-2. Regenerate the installers: `make build`.
-3. Upload the relevant `dist/install-*.lua` to Pastebin.
-4. On the ComputerCraft computer, run the paste with `pastebin run <id>`.
-5. Stop the old app if it is still running (Ctrl+T) and start it again:
+1. Run the relevant stable or nightly installer with `wget run` (or use
+   **Setup > Updates** on the client).
+2. Stop the old app if it is still running (Ctrl+T) and start it again:
    `ha`, `switch`, or `dimmer`.
 
 Choose the installer for what changed:
@@ -229,8 +224,7 @@ Choose the installer for what changed:
 | Protocol or shared library | every client and device |
 
 Pairings, labels, favorites, groups and last-known state are preserved, so no
-re-pairing is required after a normal update. If HTTP is available and the
-installer is hosted, `wget run <url>` is an alternative to Pastebin.
+re-pairing is required after a normal update.
 
 ### GitHub Actions
 

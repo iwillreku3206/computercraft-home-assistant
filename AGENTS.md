@@ -34,7 +34,7 @@ requirement.
 | `.github/workflows/ci.yml` | — | Build/check on pushes and PRs |
 | `.github/workflows/release.yml` | — | Stable tagged release + update manifest |
 | `.github/workflows/nightly.yml` | — | Nightly prerelease built from main |
-| `dist/install-*.lua` | — | Generated, Pastebin-ready installers |
+| `dist/install-*.lua` | — | Generated, self-contained installers |
 
 Config files are runtime state and must never be embedded in installers:
 
@@ -200,7 +200,7 @@ are self-contained except for the pinned Basalt URL. Verify:
   device/group details)
 - device startup, local control, configuration overlay, pairing and commands
 - installer idempotence and the Basalt slider patch (`obx,oby`)
-- generated installers still fit the Pastebin-ready single-file model
+- generated installers still work as self-contained `wget run` files
 
 Live ender-modem, GPS and redstone behaviour cannot be fully tested in
 CraftOS-PC; call that out when reporting verification.
