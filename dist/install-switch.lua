@@ -1920,7 +1920,7 @@ end
 
 return updater
 ]=],
-  ["/ha/version"] = [[0.1.0
+  ["/ha/version"] = [[0.1.1
 ]],
   ["/ha/widgets/switch.lua"] = [[-- Widget script sent by a switch device to the pocket computer.
 -- The client shell loads this in a sandbox and calls the returned function.

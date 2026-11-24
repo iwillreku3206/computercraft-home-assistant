@@ -2023,7 +2023,7 @@ end
 
 return updater
 ]=],
-  ["/ha/version"] = [[0.1.0
+  ["/ha/version"] = [[0.1.1
 ]],
   ["/ha/widgets/dimmer.lua"] = [[-- Widget script sent by a dimmer device to the pocket computer.
 return function(ctx)
