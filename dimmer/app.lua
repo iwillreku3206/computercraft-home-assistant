@@ -18,6 +18,7 @@ run({
       kind = "dimmer",
       name = "",
       side = "top",
+      sides = { "top" },
       network = ha.DEFAULT_NETWORK,
       channel = ha.DEFAULT_CHANNEL,
       pairingOpen = true,

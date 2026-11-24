@@ -86,7 +86,8 @@ local function normalizeConfig()
         device.name = "Device " .. tostring(id)
       end
       device.kind = device.kind or "switch"
-      device.side = device.side or "?"
+      device.sides = ha.normalizeSides(device.sides, device.side)
+      device.side = device.sides[1]
       device.lastSeen = tonumber(device.lastSeen) or 0
       devices[id] = device
     end
@@ -965,11 +966,13 @@ adoptDevice = function(id)
   if not widgetHash and type(entry.widget) == "table" then
     widgetHash = entry.widget.hash
   end
+  local sides = ha.normalizeSides(entry.sides, entry.side)
   cfg.devices[id] = {
     id = id,
     name = entry.name or ("Device " .. tostring(id)),
     kind = entry.kind or "switch",
-    side = entry.side or "?",
+    side = sides[1],
+    sides = sides,
     value = entry.value,
     pos = entry.pos,
     lastSeen = entry.lastSeen or ha.now(),
@@ -1061,7 +1064,14 @@ local function handleHello(id, message)
     entry.name = "Device " .. tostring(id)
   end
   entry.kind = message.kind or entry.kind or "switch"
-  entry.side = message.side or entry.side
+  if message.sides ~= nil then
+    entry.sides = ha.normalizeSides(message.sides, message.side)
+  elseif message.side ~= nil then
+    entry.sides = ha.normalizeSides(nil, message.side)
+  else
+    entry.sides = ha.normalizeSides(entry.sides, entry.side)
+  end
+  entry.side = entry.sides[1]
   entry.lastSeen = ha.now()
   entry.value = message.value
   if type(message.pos) == "table" then
@@ -1082,7 +1092,8 @@ local function handleHello(id, message)
     local oldHash = device.widgetHash
     device.name = entry.name
     device.kind = entry.kind
-    device.side = entry.side or device.side
+    device.sides = ha.normalizeSides(entry.sides, entry.side)
+    device.side = device.sides[1]
     device.lastSeen = entry.lastSeen
     device.value = entry.value
     if entry.pos then
@@ -1143,7 +1154,12 @@ local function handleState(id, message)
   end
   local entry = discovered[id]
   if not entry then
-    entry = { name = device.name, kind = device.kind }
+    entry = {
+      name = device.name,
+      kind = device.kind,
+      side = device.side,
+      sides = device.sides,
+    }
     discovered[id] = entry
   end
   entry.lastSeen = ha.now()
@@ -2105,12 +2121,16 @@ buildDeviceScreen = function()
       :setSize(W - 2, 1)
       :setText("")
     ha.marqueeLabel(nameLabel, item.name, W - 2)
-    panel:addLabel():setPosition(1, 2):setSize(W - 2, 1):setText(ha.fit(string.format(
-      "%s | id %d | side %s",
+    local metaLabel = panel:addLabel()
+      :setPosition(1, 2)
+      :setSize(W - 2, 1)
+      :setText("")
+    ha.marqueeLabel(metaLabel, string.format(
+      "%s | id %d | sides %s",
       item.kind,
       item.deviceId,
-      item.device.side or "?"
-    ), W - 2))
+      ha.sidesText(item.device.sides)
+    ), W - 2)
     panel:addLabel():setPosition(1, 3):setSize(W - 2, 1):setText(ha.fit(string.format(
       "%s | %s | seen %s",
       item.online and "online" or "offline",

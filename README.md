@@ -263,8 +263,8 @@ automatic on pushes to `main`.
 
 ### 1. Configure each device
 
-Run `switch` or `dimmer`. The device screen shows its name, side, network,
-channel, modem state and redstone output. A new device name defaults to the
+Run `switch` or `dimmer`. The device screen shows its name, redstone sides,
+network, channel, modem state and redstone output. A new device name defaults to the
 computer label; if that is blank it falls back to `Switch <id>` or
 `Dimmer <id>`. Existing installs that still have the old auto-generated name
 adopt the computer label when one is set.
@@ -272,7 +272,8 @@ adopt the computer label when one is set.
 Open **Configure** to set:
 
 - device name
-- redstone side (`top`, `bottom`, `left`, `right`, `front`, `back`)
+- redstone sides — one toggle per side; enable every output that should carry
+  the same value (`top`, `bottom`, `left`, `right`, `front`, `back`)
 - network name (default `home`)
 - radio channel (default `48721`)
 - whether new pocket computers may pair
@@ -327,7 +328,7 @@ Open the group editor and use the `^`/`v` buttons on a selected member to
 change that order. New members are appended to the end. Offline members are
 skipped for immediate commands and reconciled when they reconnect. Group
 membership is stored on the pocket, while each device keeps its own redstone
-side configuration.
+sides configuration.
 
 A group needs at least one paired switch device. A device can be in only one
 group.
@@ -447,7 +448,7 @@ All messages use network channel `48721` (configurable), protocol name
 | Type | Direction | Main fields |
 |---|---|---|
 | `discover` | client → devices | `from`, `name` |
-| `hello` | device → clients | `kind`, `name`, `side`, `value`, `pos`, `open`, `paired`, `widget` |
+| `hello` | device → clients | `kind`, `name`, `side`, `sides`, `value`, `pos`, `open`, `paired`, `widget` |
 | `state` | device → clients | `value`, `pos` |
 | `pair` / `pair_ack` / `pair_denied` | both | pairing handshake |
 | `unpair` / `unpaired` | both | forget pairing |
@@ -455,6 +456,9 @@ All messages use network channel `48721` (configurable), protocol name
 | `widget_req` | client → device | `hash` |
 | `widget` / `widget_end` | device → client | `hash`, `i`, `n`, `data` |
 | `widget_none` | device → client | no script available |
+
+`side` is kept as the first selected side for compatibility; `sides` is the
+full set of redstone outputs.
 
 Pairing is remembered on both sides. If a device forgets a client, the client
 drops the pairing on the next hello. If a client unpairs, it stops accepting
@@ -465,7 +469,7 @@ the device even if the unpair message was lost; pair again to re-add it.
 - `/ha/client.cfg` — client only: name, network, channel, sort, GPS,
   update channel, favorites, labels, filters, paired devices, groups, last
   known states.
-- `/ha/switch.cfg`, `/ha/dimmer.cfg` — device only: name, side, network,
+- `/ha/switch.cfg`, `/ha/dimmer.cfg` — device only: name, sides, network,
   channel, pairing-open flag, GPS flag, paired clients, last output state.
 - `/ha/cache/widgets/<hash>.lua` — cached widget scripts.
 - `/ha/version`, `/ha/channel` — generated updater metadata, rewritten by

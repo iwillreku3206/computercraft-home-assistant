@@ -98,7 +98,8 @@ local function normalizeConfig()
         device.name = "Device " .. tostring(id)
       end
       device.kind = device.kind or "switch"
-      device.side = device.side or "?"
+      device.sides = ha.normalizeSides(device.sides, device.side)
+      device.side = device.sides[1]
       device.lastSeen = tonumber(device.lastSeen) or 0
       devices[id] = device
     end
@@ -977,11 +978,13 @@ adoptDevice = function(id)
   if not widgetHash and type(entry.widget) == "table" then
     widgetHash = entry.widget.hash
   end
+  local sides = ha.normalizeSides(entry.sides, entry.side)
   cfg.devices[id] = {
     id = id,
     name = entry.name or ("Device " .. tostring(id)),
     kind = entry.kind or "switch",
-    side = entry.side or "?",
+    side = sides[1],
+    sides = sides,
     value = entry.value,
     pos = entry.pos,
     lastSeen = entry.lastSeen or ha.now(),
@@ -1073,7 +1076,14 @@ local function handleHello(id, message)
     entry.name = "Device " .. tostring(id)
   end
   entry.kind = message.kind or entry.kind or "switch"
-  entry.side = message.side or entry.side
+  if message.sides ~= nil then
+    entry.sides = ha.normalizeSides(message.sides, message.side)
+  elseif message.side ~= nil then
+    entry.sides = ha.normalizeSides(nil, message.side)
+  else
+    entry.sides = ha.normalizeSides(entry.sides, entry.side)
+  end
+  entry.side = entry.sides[1]
   entry.lastSeen = ha.now()
   entry.value = message.value
   if type(message.pos) == "table" then
@@ -1094,7 +1104,8 @@ local function handleHello(id, message)
     local oldHash = device.widgetHash
     device.name = entry.name
     device.kind = entry.kind
-    device.side = entry.side or device.side
+    device.sides = ha.normalizeSides(entry.sides, entry.side)
+    device.side = device.sides[1]
     device.lastSeen = entry.lastSeen
     device.value = entry.value
     if entry.pos then
@@ -1155,7 +1166,12 @@ local function handleState(id, message)
   end
   local entry = discovered[id]
   if not entry then
-    entry = { name = device.name, kind = device.kind }
+    entry = {
+      name = device.name,
+      kind = device.kind,
+      side = device.side,
+      sides = device.sides,
+    }
     discovered[id] = entry
   end
   entry.lastSeen = ha.now()
@@ -2117,12 +2133,16 @@ buildDeviceScreen = function()
       :setSize(W - 2, 1)
       :setText("")
     ha.marqueeLabel(nameLabel, item.name, W - 2)
-    panel:addLabel():setPosition(1, 2):setSize(W - 2, 1):setText(ha.fit(string.format(
-      "%s | id %d | side %s",
+    local metaLabel = panel:addLabel()
+      :setPosition(1, 2)
+      :setSize(W - 2, 1)
+      :setText("")
+    ha.marqueeLabel(metaLabel, string.format(
+      "%s | id %d | sides %s",
       item.kind,
       item.deviceId,
-      item.device.side or "?"
-    ), W - 2))
+      ha.sidesText(item.device.sides)
+    ), W - 2)
     panel:addLabel():setPosition(1, 3):setSize(W - 2, 1):setText(ha.fit(string.format(
       "%s | %s | seen %s",
       item.online and "online" or "offline",
@@ -3335,22 +3355,57 @@ function ha.validSide(side)
   return false
 end
 
-function ha.nextSide(side, direction)
-  local sides = ha.sides()
-  local current = 1
-  for index, value in ipairs(sides) do
-    if value == side then
-      current = index
-      break
+function ha.normalizeSides(value, fallback)
+  local available = ha.sides()
+  local chosen = {}
+  local found = false
+  if type(value) == "table" then
+    for _, side in ipairs(value) do
+      if type(side) == "string" and ha.validSide(side) then
+        chosen[side] = true
+        found = true
+      end
     end
   end
-  current = current + (direction or 1)
-  if current < 1 then
-    current = #sides
-  elseif current > #sides then
-    current = 1
+  if not found and type(fallback) == "string" and ha.validSide(fallback) then
+    chosen[fallback] = true
   end
-  return sides[current]
+  local result = {}
+  for _, side in ipairs(available) do
+    if chosen[side] then
+      result[#result + 1] = side
+    end
+  end
+  if #result == 0 and #available > 0 then
+    result[1] = available[1]
+  end
+  return result
+end
+
+function ha.sidesText(value)
+  if type(value) ~= "table" then
+    return tostring(value or "?")
+  end
+  local parts = {}
+  for _, side in ipairs(value) do
+    parts[#parts + 1] = tostring(side)
+  end
+  if #parts == 0 then
+    return "?"
+  end
+  return table.concat(parts, ", ")
+end
+
+function ha.sidesEqual(a, b)
+  if type(a) ~= "table" or type(b) ~= "table" or #a ~= #b then
+    return false
+  end
+  for index = 1, #a do
+    if a[index] ~= b[index] then
+      return false
+    end
+  end
+  return true
 end
 
 ---------------------------------------------------------------------------

@@ -46,9 +46,8 @@ return function(spec)
   end
   cfg.pairingOpen = cfg.pairingOpen ~= false
   cfg.gps = cfg.gps ~= false
-  if not ha.validSide(cfg.side) then
-    cfg.side = ha.sides()[1] or "top"
-  end
+  cfg.sides = ha.normalizeSides(cfg.sides, cfg.side)
+  cfg.side = cfg.sides[1]
 
   local state = spec.sanitize(cfg.state)
   if state == nil then
@@ -58,7 +57,7 @@ return function(spec)
   local network = cfg.network
   local channel = cfg.channel
   local modem, modemSide, modemError
-  local appliedSide
+  local appliedSides = {}
   local position
   local gpsLocator = ha.newGpsLocator()
   local dirty = false
@@ -93,17 +92,31 @@ return function(spec)
   end
 
   local function applyState()
-    if appliedSide and appliedSide ~= cfg.side then
-      pcall(spec.clear, appliedSide)
-      appliedSide = nil
+    local selected = {}
+    for _, side in ipairs(cfg.sides) do
+      selected[side] = true
     end
-    local ok, err = pcall(spec.apply, cfg.side, state)
-    if ok then
-      appliedSide = cfg.side
-      labels.applyError = nil
+    for side in pairs(appliedSides) do
+      if not selected[side] then
+        pcall(spec.clear, side)
+        appliedSides[side] = nil
+      end
+    end
+    local applyError
+    for _, side in ipairs(cfg.sides) do
+      local ok, err = pcall(spec.apply, side, state)
+      if ok then
+        appliedSides[side] = true
+      else
+        appliedSides[side] = nil
+        applyError = applyError or err
+      end
+    end
+    if applyError then
+      labels.applyError = tostring(applyError)
+      ha.log("redstone apply failed:", applyError)
     else
-      labels.applyError = tostring(err)
-      ha.log("redstone apply failed:", err)
+      labels.applyError = nil
     end
   end
 
@@ -145,6 +158,7 @@ return function(spec)
       kind = spec.kind,
       name = cfg.name,
       side = cfg.side,
+      sides = cfg.sides,
       value = state,
       pos = position,
       open = cfg.pairingOpen,
@@ -320,7 +334,11 @@ return function(spec)
       return
     end
     ha.marqueeLabel(labels.name, cfg.name, W - 2)
-    labels.kind:setText(string.format("%s | side: %s", spec.kind, cfg.side))
+    ha.marqueeLabel(labels.kind, string.format(
+      "%s | sides: %s",
+      spec.kind,
+      ha.sidesText(cfg.sides)
+    ), W - 2)
     labels.net:setText(string.format("%s / ch %d", cfg.network, cfg.channel))
     labels.pair:setText(string.format(
       "paired: %d | pairing %s",
@@ -381,51 +399,77 @@ return function(spec)
       overlay:hide()
     end)
 
-    content:addLabel():setPosition(1, 3):setSize(W - 2, 1):setText("Name")
+    content:addLabel():setPosition(1, 2):setSize(W - 2, 1):setText("Name")
     local nameInput = content:addInput()
-      :setPosition(1, 4)
+      :setPosition(1, 3)
       :setSize(W - 2, 1)
       :setInputLimit(24)
       :setValue(cfg.name)
 
-    local pendingSide = cfg.side
-    content:addLabel():setPosition(1, 5):setSize(W - 2, 1):setText("Redstone side")
-    local sideButton = content:addButton()
-      :setPosition(1, 6)
-      :setSize(W - 2, 1)
-      :setText("Side: " .. pendingSide)
-    sideButton:onClick(function()
-      pendingSide = ha.nextSide(pendingSide, 1)
-      sideButton:setText("Side: " .. pendingSide)
-    end)
-
-    content:addLabel():setPosition(1, 7):setSize(W - 2, 1):setText("Network name")
-    local netInput = content:addInput()
+    content:addLabel():setPosition(1, 4):setSize(W - 2, 1):setText("Redstone sides")
+    local sideSwitches = {}
+    local selectedSides = {}
+    for _, side in ipairs(cfg.sides) do
+      selectedSides[side] = true
+    end
+    local sideColumnWidth = math.max(1, math.floor((W - 2) / 2))
+    local sideLabelWidth = math.max(4, sideColumnWidth - 4)
+    for index, side in ipairs(ha.sides()) do
+      local column = (index - 1) % 2
+      local row = 5 + math.floor((index - 1) / 2)
+      local x = 1 + column * (sideColumnWidth + 1)
+      content:addLabel():setPosition(x, row):setSize(sideLabelWidth, 1):setText(side)
+      sideSwitches[side] = content:addSwitch()
+        :setPosition(x + sideLabelWidth, row)
+        :setSize(4, 1)
+        :setValue(selectedSides[side] == true)
+    end
+    local configError = content:addLabel()
       :setPosition(1, 8)
+      :setSize(W - 2, 1)
+      :setText("")
+      :setForeground(colors.red)
+
+    content:addLabel():setPosition(1, 9):setSize(W - 2, 1):setText("Network name")
+    local netInput = content:addInput()
+      :setPosition(1, 10)
       :setSize(W - 2, 1)
       :setInputLimit(24)
       :setValue(cfg.network)
 
-    content:addLabel():setPosition(1, 9):setSize(W - 2, 1):setText("Radio channel")
+    content:addLabel():setPosition(1, 11):setSize(W - 2, 1):setText("Radio channel")
     local channelInput = content:addInput()
-      :setPosition(1, 10)
+      :setPosition(1, 12)
       :setSize(W - 2, 1)
       :setInputLimit(5)
       :setValue(tostring(cfg.channel))
 
     local pairingSwitch = content:addSwitch()
-      :setPosition(W - 4, 11)
+      :setPosition(W - 4, 13)
       :setSize(4, 1)
       :setValue(cfg.pairingOpen)
-    content:addLabel():setPosition(1, 11):setSize(W - 6, 1):setText("Allow new pairing")
+    content:addLabel():setPosition(1, 13):setSize(W - 6, 1):setText("Allow new pairing")
 
     local gpsSwitch = content:addSwitch()
-      :setPosition(W - 4, 12)
+      :setPosition(W - 4, 14)
       :setSize(4, 1)
       :setValue(cfg.gps)
-    content:addLabel():setPosition(1, 12):setSize(W - 6, 1):setText("Use GPS")
+    content:addLabel():setPosition(1, 14):setSize(W - 6, 1):setText("Use GPS")
 
-    content:addButton():setPosition(1, 14):setSize(math.floor((W - 2) / 2), 1):setText("Save"):onClick(function()
+    content:addButton():setPosition(1, 15):setSize(math.floor((W - 2) / 2), 1):setText("Save"):onClick(function()
+      local selected = {}
+      for _, side in ipairs(ha.sides()) do
+        local toggle = sideSwitches[side]
+        if toggle and toggle:getValue() then
+          selected[#selected + 1] = side
+        end
+      end
+      if #selected == 0 then
+        configError:setText("Select at least one side.")
+        return
+      end
+      configError:setText("")
+
       local name = ha.safeText(nameInput:getValue(), 24)
       if name ~= "" then
         cfg.name = name
@@ -442,10 +486,11 @@ return function(spec)
       cfg.gps = gpsSwitch:getValue() and true or false
 
       local channelChanged = cfg.channel ~= channel
-      local sideChanged = cfg.side ~= pendingSide
+      local sidesChanged = not ha.sidesEqual(cfg.sides, selected)
       local networkChanged = cfg.network ~= network
 
-      cfg.side = pendingSide
+      cfg.sides = selected
+      cfg.side = selected[1]
       network = cfg.network
       saveNow()
       if channelChanged then
@@ -453,10 +498,10 @@ return function(spec)
         channel = cfg.channel
         ensureModem()
       end
-      if sideChanged then
+      if sidesChanged then
         applyState()
       end
-      if networkChanged or sideChanged or channelChanged then
+      if networkChanged or sidesChanged or channelChanged then
         sendHello()
       end
       content:clearFocusedChild()
@@ -464,7 +509,7 @@ return function(spec)
       updateMainUi()
     end)
 
-    content:addButton():setPosition(math.floor((W - 2) / 2) + 2, 14):setSize(math.ceil((W - 2) / 2), 1):setText("Cancel"):onClick(function()
+    content:addButton():setPosition(math.floor((W - 2) / 2) + 2, 15):setSize(math.ceil((W - 2) / 2), 1):setText("Cancel"):onClick(function()
       content:clearFocusedChild()
       overlay:hide()
     end)

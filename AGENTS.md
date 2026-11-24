@@ -43,7 +43,7 @@ Config files are runtime state and must never be embedded in installers:
   favorites, labels, paired devices, groups, update channel, last known state.
 - `/ha/version`, `/ha/channel` — generated update metadata. Do not treat
   these as user config; rebuilds/installers own them.
-- `/ha/switch.cfg`, `/ha/dimmer.cfg` — per-device name, side, network, channel,
+- `/ha/switch.cfg`, `/ha/dimmer.cfg` — per-device name, sides, network, channel,
   pairing-open flag, GPS flag, paired clients, last output state. A new device
   name defaults to the computer label, then `Switch <id>` / `Dimmer <id>`.
 - `/ha/cache/widgets/<hash>.lua` — device-sent widget cache.
@@ -107,6 +107,9 @@ Config files are runtime state and must never be embedded in installers:
   `pair_denied`, `unpair`, `unpaired`, `cmd`, `widget_req`, `widget`,
   `widget_end`, `widget_none`.
 - Device IDs are computer IDs (numbers), not names. Names are display-only.
+- Device redstone output is a set of sides (`cfg.sides`). Apply the current
+  state to every selected side, and keep `side` as the first selected side for
+  older clients. `hello` carries both `sides` and `side`.
 - Clients send commands only to paired devices. Devices ignore commands from
   unpaired clients.
 - Pairing is remembered on both sides. A client must **not** adopt a device
