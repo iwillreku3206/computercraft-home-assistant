@@ -168,6 +168,7 @@ local updateState = {
   doneVersion = nil,
   message = nil,
 }
+local autoRestartAt
 local discovered = {}
 local widgetSources = {}
 local widgetRx = {}
@@ -682,11 +683,14 @@ startUpdateCheck = function(manual)
     if overlayScreen == "updates" or overlayScreen == "menu" then
       defer(renderOverlay)
     end
+    if updateState.available then
+      startUpdateInstall(updateState.available, true)
+    end
   end)()
   return true
 end
 
-startUpdateInstall = function(info)
+startUpdateInstall = function(info, auto)
   if updateState.installing or not info or not info.installer or info.installer == "" then
     updateState.error = "No installer URL in the update manifest"
     refreshUpdateUi()
@@ -718,7 +722,7 @@ startUpdateInstall = function(info)
     if overlayScreen == "updates" then
       defer(renderOverlay)
     end
-    local ok, installErr = updater.installFile(path)
+    local ok, installErr = updater.installFile(path, { auto = auto })
     updateState.installing = false
     updateState.message = nil
     if ok then
@@ -732,6 +736,22 @@ startUpdateInstall = function(info)
         saveNow()
       end
       ha.log("updated to", info.version)
+      if auto then
+        local installedVersion = updater.currentVersion()
+        if updater.compareVersions(installedVersion, info.version) >= 0 then
+          saveNow()
+          autoRestartAt = ha.now() + 1000
+          updateState.message = "Updated to " .. info.version .. ". Restarting..."
+          refreshUpdateUi()
+          if overlayScreen == "updates" then
+            defer(renderOverlay)
+          end
+          return
+        end
+        updateState.doneVersion = nil
+        updateState.error = "Installed " .. installedVersion .. " instead of " .. info.version
+        ha.log("update version mismatch", installedVersion, info.version)
+      end
     else
       updateState.error = installErr or "Installer failed"
       ha.log("update failed", installErr)
@@ -2301,6 +2321,11 @@ end
 
 tick = function()
   tickCount = tickCount + 1
+  if autoRestartAt and ha.now() >= autoRestartAt then
+    autoRestartAt = nil
+    saveNow()
+    os.reboot()
+  end
   clockLabel:setText(ha.clockText())
   if dirty and ha.now() - lastSave > 2000 then
     saveNow()
@@ -3645,7 +3670,7 @@ function updater.download(url, name)
   return path
 end
 
-function updater.install(source)
+function updater.install(source, options)
   if type(source) ~= "string" or source == "" then
     return false, "empty installer"
   end
@@ -3654,6 +3679,10 @@ function updater.install(source)
     print = function(...)
       ha.log("update", ...)
     end,
+    HA_AUTO_UPDATE = options and options.auto and true or nil,
+    read = options and options.auto and function()
+      return nil
+    end or nil,
   }, { __index = _G })
 
   local chunk, err = ha.compile(source, "=ha-update", env)
@@ -3667,12 +3696,12 @@ function updater.install(source)
   return true
 end
 
-function updater.installFile(path)
+function updater.installFile(path, options)
   local source = ha.readFile(path)
   if not source then
     return false, "could not read " .. tostring(path)
   end
-  return updater.install(source)
+  return updater.install(source, options)
 end
 
 return updater
@@ -3886,7 +3915,7 @@ end
 
 return shell
 ]=],
-  ["/ha/version"] = [[0.1.1
+  ["/ha/version"] = [[0.1.2
 ]],
   ["/ha/widgets/dimmer.lua"] = [[-- Widget script sent by a dimmer device to the pocket computer.
 return function(ctx)
@@ -4321,8 +4350,10 @@ local function startupConfigure()
   end
 end
 
-startupLabel()
-startupConfigure()
+if not HA_AUTO_UPDATE then
+  startupLabel()
+  startupConfigure()
+end
 
 print("")
 print("Done. Run: " .. RUN_COMMAND)

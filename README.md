@@ -163,14 +163,16 @@ There are two update channels:
 | Stable | latest GitHub release | yes |
 | Nightly | prerelease built from `main` on every push | no |
 
-The client and device apps check the selected channel on startup. The client
-shows a green version button in the summary row when an update is available;
-devices show an update line and **Install** button on their main screen.
+The client and device apps check the selected channel on startup. When a newer
+build is available it is downloaded and installed automatically. Automatic
+updates skip the installer's label/startup prompts, preserve configs, verify
+that `/ha/version` changed to the expected release, then restart the computer.
+The update line and **Install** button remain visible only as a retry path if
+an automatic download or install fails.
 
 Open **Setup > Updates** on the pocket to switch between **Stable** and
-**Nightly**, check now, or install the available build. Installation downloads
-the matching release installer, runs it, and preserves configs; restart the
-program afterward.
+**Nightly** or to check now; switching channels also triggers an automatic
+update. A manual **Install** click still runs the installer interactively.
 
 The updater uses these fixed manifests for
 `iwillreku3206/computercraft-home-assistant`:
@@ -292,7 +294,8 @@ screen contains:
 - **Sort & filters** — sort by name/distance, favorites-only, offline filter,
   and label filters.
 - **Network** — pocket name, network name, channel, GPS toggle.
-- **Updates** — choose Stable or Nightly, check, and install updates.
+- **Updates** — choose Stable or Nightly, check now, or retry a failed
+  automatic install.
 - **Refresh GPS** — re-locates the pocket.
 
 Long device and group names scroll in card titles and detail views instead of

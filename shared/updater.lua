@@ -167,7 +167,7 @@ function updater.download(url, name)
   return path
 end
 
-function updater.install(source)
+function updater.install(source, options)
   if type(source) ~= "string" or source == "" then
     return false, "empty installer"
   end
@@ -176,6 +176,10 @@ function updater.install(source)
     print = function(...)
       ha.log("update", ...)
     end,
+    HA_AUTO_UPDATE = options and options.auto and true or nil,
+    read = options and options.auto and function()
+      return nil
+    end or nil,
   }, { __index = _G })
 
   local chunk, err = ha.compile(source, "=ha-update", env)
@@ -189,12 +193,12 @@ function updater.install(source)
   return true
 end
 
-function updater.installFile(path)
+function updater.installFile(path, options)
   local source = ha.readFile(path)
   if not source then
     return false, "could not read " .. tostring(path)
   end
-  return updater.install(source)
+  return updater.install(source, options)
 end
 
 return updater

@@ -74,6 +74,7 @@ return function(spec)
     error = nil,
     doneVersion = nil,
   }
+  local autoRestartAt
   local updateControl
   local updateButton
   local startUpdateInstall
@@ -682,10 +683,13 @@ return function(spec)
         ha.log("update check failed:", updateState.error)
       end
       refreshUpdateUi()
+      if updateState.available then
+        startUpdateInstall(updateState.available, true)
+      end
     end)()
   end
 
-  startUpdateInstall = function(info)
+  startUpdateInstall = function(info, auto)
     if updateState.installing or not info or not info.installer or info.installer == "" then
       return
     end
@@ -702,13 +706,25 @@ return function(spec)
         refreshUpdateUi()
         return
       end
-      local ok, installErr = updater.installFile(path)
+      local ok, installErr = updater.installFile(path, { auto = auto })
       updateState.installing = false
       if ok then
         updateState.available = nil
         updateState.doneVersion = info.version
         updateState.error = nil
         ha.log("updated to", info.version)
+        if auto then
+          local installedVersion = updater.currentVersion()
+          if updater.compareVersions(installedVersion, info.version) >= 0 then
+            saveNow()
+            autoRestartAt = ha.now() + 1000
+            refreshUpdateUi()
+            return
+          end
+          updateState.doneVersion = nil
+          updateState.error = "Installed " .. installedVersion .. " instead of " .. info.version
+          ha.log("update version mismatch", installedVersion, info.version)
+        end
       else
         updateState.error = installErr or "Installer failed"
         ha.log("update install failed:", updateState.error)
@@ -731,6 +747,11 @@ return function(spec)
 
   local function tick()
     ticks = ticks + 1
+    if autoRestartAt and ha.now() >= autoRestartAt then
+      autoRestartAt = nil
+      saveNow()
+      os.reboot()
+    end
     if dirty then
       saveNow()
     end

@@ -156,6 +156,7 @@ local updateState = {
   doneVersion = nil,
   message = nil,
 }
+local autoRestartAt
 local discovered = {}
 local widgetSources = {}
 local widgetRx = {}
@@ -670,11 +671,14 @@ startUpdateCheck = function(manual)
     if overlayScreen == "updates" or overlayScreen == "menu" then
       defer(renderOverlay)
     end
+    if updateState.available then
+      startUpdateInstall(updateState.available, true)
+    end
   end)()
   return true
 end
 
-startUpdateInstall = function(info)
+startUpdateInstall = function(info, auto)
   if updateState.installing or not info or not info.installer or info.installer == "" then
     updateState.error = "No installer URL in the update manifest"
     refreshUpdateUi()
@@ -706,7 +710,7 @@ startUpdateInstall = function(info)
     if overlayScreen == "updates" then
       defer(renderOverlay)
     end
-    local ok, installErr = updater.installFile(path)
+    local ok, installErr = updater.installFile(path, { auto = auto })
     updateState.installing = false
     updateState.message = nil
     if ok then
@@ -720,6 +724,22 @@ startUpdateInstall = function(info)
         saveNow()
       end
       ha.log("updated to", info.version)
+      if auto then
+        local installedVersion = updater.currentVersion()
+        if updater.compareVersions(installedVersion, info.version) >= 0 then
+          saveNow()
+          autoRestartAt = ha.now() + 1000
+          updateState.message = "Updated to " .. info.version .. ". Restarting..."
+          refreshUpdateUi()
+          if overlayScreen == "updates" then
+            defer(renderOverlay)
+          end
+          return
+        end
+        updateState.doneVersion = nil
+        updateState.error = "Installed " .. installedVersion .. " instead of " .. info.version
+        ha.log("update version mismatch", installedVersion, info.version)
+      end
     else
       updateState.error = installErr or "Installer failed"
       ha.log("update failed", installErr)
@@ -2289,6 +2309,11 @@ end
 
 tick = function()
   tickCount = tickCount + 1
+  if autoRestartAt and ha.now() >= autoRestartAt then
+    autoRestartAt = nil
+    saveNow()
+    os.reboot()
+  end
   clockLabel:setText(ha.clockText())
   if dirty and ha.now() - lastSave > 2000 then
     saveNow()

@@ -163,11 +163,15 @@ Config files are runtime state and must never be embedded in installers:
 - Manifest versions are compared against `/ha/version`; nightly versions use
   `version.txt` plus the GitHub run number. Installed channel comes from
   `/ha/channel`. Do not hand-edit generated version/channel metadata.
-- Installation downloads the matching installer, executes it in a controlled
-  environment, and requires a program restart. Installers must preserve client
-  and device configs.
-- Never auto-execute an update without the user choosing **Install** on the
-  client or the device.
+- Installation downloads the matching installer and executes it in a controlled
+  environment. Installers must preserve client and device configs.
+- Updates are installed automatically from both client and device startup
+  checks; do not reintroduce a mandatory Install click. When an automatic
+  install succeeds, verify `/ha/version` matches the manifest and reboot.
+- Automatic updates must not prompt. `updater.install(..., { auto = true })`
+  sets `HA_AUTO_UPDATE`; the embedded startup prompt skips label/startup
+  selection entirely in that mode and must not reboot on its own. Manual
+  installs keep the interactive label/startup prompts.
 - `make build` defaults to `CHANNEL=stable` and the version in `version.txt`,
   and must reproduce committed `dist/`. Release/nightly builds override
   `CHANNEL` and usually `VERSION`.

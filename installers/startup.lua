@@ -122,5 +122,7 @@ local function startupConfigure()
   end
 end
 
-startupLabel()
-startupConfigure()
+if not HA_AUTO_UPDATE then
+  startupLabel()
+  startupConfigure()
+end
