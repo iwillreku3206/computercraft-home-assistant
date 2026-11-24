@@ -95,16 +95,36 @@ the click/drag handler compares absolute mouse coordinates against relative
 positions, so sliders below the first row cannot be clicked. Both fixes are
 applied only to `/basalt-ha.lua`.
 
-### Option B: Host the generated installer
+### Option B: `wget run` from GitHub Releases
 
-If HTTP access is available, release assets can be run directly:
+If HTTP access is available, release assets can be run directly.
+
+Stable (default, latest stable GitHub release):
+
+| Installer | URL |
+|---|---|
+| Client | `https://github.com/iwillreku3206/computercraft-home-assistant/releases/latest/download/install-client.lua` |
+| Switch | `https://github.com/iwillreku3206/computercraft-home-assistant/releases/latest/download/install-switch.lua` |
+| Dimmer | `https://github.com/iwillreku3206/computercraft-home-assistant/releases/latest/download/install-dimmer.lua` |
+| All | `https://github.com/iwillreku3206/computercraft-home-assistant/releases/latest/download/install-all.lua` |
+
+Nightly (prerelease built from `main`):
+
+| Installer | URL |
+|---|---|
+| Client | `https://github.com/iwillreku3206/computercraft-home-assistant/releases/download/nightly/install-client.lua` |
+| Switch | `https://github.com/iwillreku3206/computercraft-home-assistant/releases/download/nightly/install-switch.lua` |
+| Dimmer | `https://github.com/iwillreku3206/computercraft-home-assistant/releases/download/nightly/install-dimmer.lua` |
+| All | `https://github.com/iwillreku3206/computercraft-home-assistant/releases/download/nightly/install-all.lua` |
+
+Examples:
 
 ```text
-# Stable (default)
+# Stable client
 wget run https://github.com/iwillreku3206/computercraft-home-assistant/releases/latest/download/install-client.lua
 
-# Nightly (main branch builds)
-wget run https://github.com/iwillreku3206/computercraft-home-assistant/releases/download/nightly/install-client.lua
+# Nightly switch device
+wget run https://github.com/iwillreku3206/computercraft-home-assistant/releases/download/nightly/install-switch.lua
 ```
 
 ### Rebuilding the installers
