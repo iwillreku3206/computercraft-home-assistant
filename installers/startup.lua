@@ -105,6 +105,14 @@ local function startupConfigure()
     if choice then
       if startupWrite(choice.command) then
         print(string.format("Updated /startup.lua: shell.run(%q)", choice.command))
+        print("Startup changed; restarting computer...")
+        local rebooted = pcall(function()
+          os.sleep(1)
+          os.reboot()
+        end)
+        if not rebooted then
+          print("Could not restart automatically; reboot manually.")
+        end
       else
         print("Could not update /startup.lua.")
       end

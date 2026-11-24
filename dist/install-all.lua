@@ -28,7 +28,7 @@ run({
       version = 1,
       id = os.getComputerID(),
       kind = "dimmer",
-      name = "Dimmer " .. tostring(os.getComputerID()),
+      name = "",
       side = "top",
       network = ha.DEFAULT_NETWORK,
       channel = ha.DEFAULT_CHANNEL,
@@ -597,6 +597,9 @@ rebuildHome = function(keepOffset)
     oldOffset = select(2, list:getOffset()) or 0
   end
 
+  for _, card in pairs(cards) do
+    card:destroy()
+  end
   list:removeChildren()
   cards = {}
 
@@ -1385,6 +1388,7 @@ closeOverlay = function()
   overlayScreen = nil
   overlayArg = nil
   overlayParent = nil
+  ha.clearMarqueesIn(overlay)
   overlay:clearFocusedChild()
   overlay:hide()
   saveNow()
@@ -1419,6 +1423,7 @@ openScreen = function(name, arg, parent)
 end
 
 local function overlayHeader(title)
+  ha.clearMarqueesIn(overlay)
   overlay:removeChildren()
   overlay:clearFocusedChild()
   activeScroll = nil
@@ -1427,8 +1432,9 @@ local function overlayHeader(title)
   local heading = overlay:addLabel()
     :setPosition(1, 1)
     :setSize(math.max(1, W - 9), 1)
-    :setText(ha.fit(title, W - 9))
+    :setText("")
   heading:setForeground(colors.white)
+  ha.marqueeLabel(heading, title, W - 9)
   local backButton = overlay:addButton()
     :setPosition(W - 7, 1)
     :setSize(5, 1)
@@ -1572,10 +1578,11 @@ buildPairScreen = function()
     local entry = item.entry
     local id = item.id
     local online = (ha.now() - (entry.lastSeen or 0)) < ha.OFFLINE_MS
-    scroll:addLabel()
+    local nameLabel = scroll:addLabel()
       :setPosition(1, y)
       :setSize(W - 8, 1)
-      :setText(ha.fit(entry.name or ("Device " .. id), W - 8))
+      :setText("")
+    ha.marqueeLabel(nameLabel, entry.name or ("Device " .. id), W - 8)
     local meta = string.format("%s #%d", entry.kind or "?", id)
     scroll:addLabel()
       :setPosition(1, y + 1)
@@ -1646,10 +1653,11 @@ buildGroupsScreen = function()
   local y = 1
   for _, group in ipairs(groups) do
     local online, on = groupStats(group)
-    scroll:addLabel()
+    local nameLabel = scroll:addLabel()
       :setPosition(1, y)
       :setSize(W - 8, 1)
-      :setText(ha.fit(group.name, W - 8))
+      :setText("")
+    ha.marqueeLabel(nameLabel, group.name, W - 8)
     scroll:addLabel()
       :setPosition(1, y + 1)
       :setSize(W - 8, 1)
@@ -1749,17 +1757,17 @@ buildGroupEditScreen = function()
     for id, row in pairs(rows) do
       local position = ordinalOf(id)
       if position then
-        row.toggle:setText(string.format(
+        ha.marqueeLabel(row.toggle, string.format(
           "[x] %d. %s",
           position,
-          ha.fit(row.device.name, W - 11)
-        ))
+          row.device.name
+        ), W - 3)
         row.up:show()
         row.down:show()
         row.up:enable(position > 1)
         row.down:enable(position < #memberOrder)
       else
-        row.toggle:setText("[ ] " .. ha.fit(row.device.name, W - 8))
+        ha.marqueeLabel(row.toggle, "[ ] " .. row.device.name, W - 3)
         row.up:hide()
         row.down:hide()
       end
@@ -2189,7 +2197,11 @@ buildDeviceScreen = function()
   end
 
   if item.isGroup then
-    panel:addLabel():setPosition(1, 1):setSize(W - 2, 1):setText(ha.fit(item.name, W - 2))
+    local nameLabel = panel:addLabel()
+      :setPosition(1, 1)
+      :setSize(W - 2, 1)
+      :setText("")
+    ha.marqueeLabel(nameLabel, item.name, W - 2)
     panel:addLabel():setPosition(1, 2):setSize(W - 2, 1):setText(string.format(
       "Group | %d members | %d%%",
       item.members,
@@ -2202,7 +2214,11 @@ buildDeviceScreen = function()
       item.onCount
     ))
   else
-    panel:addLabel():setPosition(1, 1):setSize(W - 2, 1):setText(ha.fit(item.name, W - 2))
+    local nameLabel = panel:addLabel()
+      :setPosition(1, 1)
+      :setSize(W - 2, 1)
+      :setText("")
+    ha.marqueeLabel(nameLabel, item.name, W - 2)
     panel:addLabel():setPosition(1, 2):setSize(W - 2, 1):setText(ha.fit(string.format(
       "%s | id %d | side %s",
       item.kind,
@@ -2545,6 +2561,7 @@ end
 clockLabel:setText(ha.clockText())
 
 local tickTimer = os.startTimer(1)
+local marqueeTimer = os.startTimer(0.25)
 
 basalt.onEvent(function(event, p1, p2, p3, p4, p5)
   if event == "modem_message" then
@@ -2569,6 +2586,9 @@ basalt.onEvent(function(event, p1, p2, p3, p4, p5)
     if p1 == tickTimer then
       tickTimer = os.startTimer(1)
       tick()
+    elseif p1 == marqueeTimer then
+      marqueeTimer = os.startTimer(0.25)
+      ha.tickMarquees()
     elseif flushTimer and p1 == flushTimer then
       flushTimer = nil
       flushOutbox()
@@ -2652,6 +2672,13 @@ return function(spec)
   cfg.kind = spec.kind
   cfg.paired = type(cfg.paired) == "table" and cfg.paired or {}
   cfg.name = ha.safeText(cfg.name, 24)
+  local computerLabel = ""
+  if type(os.getComputerLabel) == "function" then
+    computerLabel = ha.safeText(os.getComputerLabel() or "", 24)
+  end
+  if cfg.name == "" or (computerLabel ~= "" and cfg.name == spec.defaultName) then
+    cfg.name = computerLabel ~= "" and computerLabel or (spec.defaultName or (spec.title .. " " .. tostring(cfg.id)))
+  end
   if cfg.name == "" then
     cfg.name = spec.defaultName or (spec.title .. " " .. tostring(cfg.id))
   end
@@ -2938,7 +2965,7 @@ return function(spec)
     if not main then
       return
     end
-    labels.name:setText(ha.fit(cfg.name, W - 2))
+    ha.marqueeLabel(labels.name, cfg.name, W - 2)
     labels.kind:setText(string.format("%s | side: %s", spec.kind, cfg.side))
     labels.net:setText(string.format("%s / ch %d", cfg.network, cfg.channel))
     labels.pair:setText(string.format(
@@ -3300,6 +3327,7 @@ return function(spec)
   ensureModem()
 
   local timer = os.startTimer(1)
+  local marqueeTimer = os.startTimer(0.25)
   local ticks = 0
 
   local function tick()
@@ -3347,6 +3375,9 @@ return function(spec)
       if p1 == timer then
         timer = os.startTimer(1)
         tick()
+      elseif p1 == marqueeTimer then
+        marqueeTimer = os.startTimer(0.25)
+        ha.tickMarquees()
       end
       return
     elseif event == "terminate" then
@@ -3473,6 +3504,89 @@ function ha.fit(value, width)
     return text:sub(1, width)
   end
   return text:sub(1, width - 2) .. ".."
+end
+
+local MARQUEE_GAP = "   "
+local marquees = setmetatable({}, { __mode = "k" })
+
+local function marqueeWindow(text, width, offset)
+  local loop = text .. MARQUEE_GAP
+  local length = #loop
+  if length == 0 then
+    return ""
+  end
+  local start = offset % length
+  return (loop .. loop):sub(start + 1, start + width)
+end
+
+function ha.marqueeLabel(label, value, width)
+  if not label then
+    return
+  end
+  local text = tostring(value or "")
+  width = math.floor(tonumber(width) or 0)
+  if width <= 0 then
+    label:setText("")
+    marquees[label] = nil
+    return
+  end
+  if #text <= width then
+    label:setText(text)
+    marquees[label] = nil
+    return
+  end
+
+  local entry = marquees[label]
+  if not entry then
+    entry = { offset = 0 }
+    marquees[label] = entry
+  end
+  if entry.text ~= text or entry.width ~= width then
+    entry.offset = 0
+  end
+  entry.text = text
+  entry.width = width
+  label:setText(marqueeWindow(text, width, entry.offset))
+end
+
+function ha.clearMarquee(label)
+  if label then
+    marquees[label] = nil
+  end
+end
+
+function ha.clearMarqueesIn(container)
+  if not container then
+    return
+  end
+  for label in pairs(marquees) do
+    local ok, parent = pcall(label.getParent, label)
+    if not ok or parent == nil then
+      marquees[label] = nil
+    else
+      while parent do
+        if parent == container then
+          marquees[label] = nil
+          break
+        end
+        local nextOk
+        nextOk, parent = pcall(parent.getParent, parent)
+        if not nextOk then
+          break
+        end
+      end
+    end
+  end
+end
+
+function ha.tickMarquees()
+  for label, entry in pairs(marquees) do
+    local length = #entry.text + #MARQUEE_GAP
+    if length > 0 then
+      entry.offset = (entry.offset + 1) % length
+      label:setText(marqueeWindow(entry.text, entry.width, entry.offset))
+    end
+  end
 end
 
 function ha.normLabel(value)
@@ -4411,7 +4525,8 @@ function shell.buildCard(parent, spec)
     :setPosition(1, 1)
     :setSize(spec.w - 7, 1)
     :setForeground(colors.white)
-    :setText(ha.fit(spec.title or "", spec.w - 7))
+    :setText("")
+  ha.marqueeLabel(titleLabel, spec.title or "", spec.w - 7)
 
   local statusLabel = card:addLabel()
     :setPosition(spec.w - 5, 1)
@@ -4449,7 +4564,7 @@ function shell.buildCard(parent, spec)
   end
 
   function ctx:setTitle(text)
-    titleLabel:setText(ha.fit(text or "", spec.w - 7))
+    ha.marqueeLabel(titleLabel, text or "", spec.w - 7)
   end
 
   function ctx:setStatus(text, color)
@@ -4537,7 +4652,7 @@ function shell.buildCard(parent, spec)
   end
 
   function cardState:setTitle(text)
-    titleLabel:setText(ha.fit(text or "", spec.w - 7))
+    ha.marqueeLabel(titleLabel, text or "", spec.w - 7)
   end
 
   function cardState:setStatus(text, color)
@@ -4546,6 +4661,7 @@ function shell.buildCard(parent, spec)
   end
 
   function cardState:destroy()
+    ha.clearMarquee(titleLabel)
     card:remove()
   end
 
@@ -4749,7 +4865,7 @@ run({
       version = 1,
       id = os.getComputerID(),
       kind = "switch",
-      name = "Switch " .. tostring(os.getComputerID()),
+      name = "",
       side = "top",
       network = ha.DEFAULT_NETWORK,
       channel = ha.DEFAULT_CHANNEL,
@@ -5053,6 +5169,14 @@ local function startupConfigure()
     if choice then
       if startupWrite(choice.command) then
         print(string.format("Updated /startup.lua: shell.run(%q)", choice.command))
+        print("Startup changed; restarting computer...")
+        local rebooted = pcall(function()
+          os.sleep(1)
+          os.reboot()
+        end)
+        if not rebooted then
+          print("Could not restart automatically; reboot manually.")
+        end
       else
         print("Could not update /startup.lua.")
       end

@@ -112,6 +112,89 @@ function ha.fit(value, width)
   return text:sub(1, width - 2) .. ".."
 end
 
+local MARQUEE_GAP = "   "
+local marquees = setmetatable({}, { __mode = "k" })
+
+local function marqueeWindow(text, width, offset)
+  local loop = text .. MARQUEE_GAP
+  local length = #loop
+  if length == 0 then
+    return ""
+  end
+  local start = offset % length
+  return (loop .. loop):sub(start + 1, start + width)
+end
+
+function ha.marqueeLabel(label, value, width)
+  if not label then
+    return
+  end
+  local text = tostring(value or "")
+  width = math.floor(tonumber(width) or 0)
+  if width <= 0 then
+    label:setText("")
+    marquees[label] = nil
+    return
+  end
+  if #text <= width then
+    label:setText(text)
+    marquees[label] = nil
+    return
+  end
+
+  local entry = marquees[label]
+  if not entry then
+    entry = { offset = 0 }
+    marquees[label] = entry
+  end
+  if entry.text ~= text or entry.width ~= width then
+    entry.offset = 0
+  end
+  entry.text = text
+  entry.width = width
+  label:setText(marqueeWindow(text, width, entry.offset))
+end
+
+function ha.clearMarquee(label)
+  if label then
+    marquees[label] = nil
+  end
+end
+
+function ha.clearMarqueesIn(container)
+  if not container then
+    return
+  end
+  for label in pairs(marquees) do
+    local ok, parent = pcall(label.getParent, label)
+    if not ok or parent == nil then
+      marquees[label] = nil
+    else
+      while parent do
+        if parent == container then
+          marquees[label] = nil
+          break
+        end
+        local nextOk
+        nextOk, parent = pcall(parent.getParent, parent)
+        if not nextOk then
+          break
+        end
+      end
+    end
+  end
+end
+
+function ha.tickMarquees()
+  for label, entry in pairs(marquees) do
+    local length = #entry.text + #MARQUEE_GAP
+    if length > 0 then
+      entry.offset = (entry.offset + 1) % length
+      label:setText(marqueeWindow(entry.text, entry.width, entry.offset))
+    end
+  end
+end
+
 function ha.normLabel(value)
   local text = ha.safeText(value, 20):lower()
   if text == "" then

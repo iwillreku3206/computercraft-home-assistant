@@ -40,6 +40,13 @@ return function(spec)
   cfg.kind = spec.kind
   cfg.paired = type(cfg.paired) == "table" and cfg.paired or {}
   cfg.name = ha.safeText(cfg.name, 24)
+  local computerLabel = ""
+  if type(os.getComputerLabel) == "function" then
+    computerLabel = ha.safeText(os.getComputerLabel() or "", 24)
+  end
+  if cfg.name == "" or (computerLabel ~= "" and cfg.name == spec.defaultName) then
+    cfg.name = computerLabel ~= "" and computerLabel or (spec.defaultName or (spec.title .. " " .. tostring(cfg.id)))
+  end
   if cfg.name == "" then
     cfg.name = spec.defaultName or (spec.title .. " " .. tostring(cfg.id))
   end
@@ -326,7 +333,7 @@ return function(spec)
     if not main then
       return
     end
-    labels.name:setText(ha.fit(cfg.name, W - 2))
+    ha.marqueeLabel(labels.name, cfg.name, W - 2)
     labels.kind:setText(string.format("%s | side: %s", spec.kind, cfg.side))
     labels.net:setText(string.format("%s / ch %d", cfg.network, cfg.channel))
     labels.pair:setText(string.format(
@@ -688,6 +695,7 @@ return function(spec)
   ensureModem()
 
   local timer = os.startTimer(1)
+  local marqueeTimer = os.startTimer(0.25)
   local ticks = 0
 
   local function tick()
@@ -735,6 +743,9 @@ return function(spec)
       if p1 == timer then
         timer = os.startTimer(1)
         tick()
+      elseif p1 == marqueeTimer then
+        marqueeTimer = os.startTimer(0.25)
+        ha.tickMarquees()
       end
       return
     elseif event == "terminate" then
@@ -861,6 +872,89 @@ function ha.fit(value, width)
     return text:sub(1, width)
   end
   return text:sub(1, width - 2) .. ".."
+end
+
+local MARQUEE_GAP = "   "
+local marquees = setmetatable({}, { __mode = "k" })
+
+local function marqueeWindow(text, width, offset)
+  local loop = text .. MARQUEE_GAP
+  local length = #loop
+  if length == 0 then
+    return ""
+  end
+  local start = offset % length
+  return (loop .. loop):sub(start + 1, start + width)
+end
+
+function ha.marqueeLabel(label, value, width)
+  if not label then
+    return
+  end
+  local text = tostring(value or "")
+  width = math.floor(tonumber(width) or 0)
+  if width <= 0 then
+    label:setText("")
+    marquees[label] = nil
+    return
+  end
+  if #text <= width then
+    label:setText(text)
+    marquees[label] = nil
+    return
+  end
+
+  local entry = marquees[label]
+  if not entry then
+    entry = { offset = 0 }
+    marquees[label] = entry
+  end
+  if entry.text ~= text or entry.width ~= width then
+    entry.offset = 0
+  end
+  entry.text = text
+  entry.width = width
+  label:setText(marqueeWindow(text, width, entry.offset))
+end
+
+function ha.clearMarquee(label)
+  if label then
+    marquees[label] = nil
+  end
+end
+
+function ha.clearMarqueesIn(container)
+  if not container then
+    return
+  end
+  for label in pairs(marquees) do
+    local ok, parent = pcall(label.getParent, label)
+    if not ok or parent == nil then
+      marquees[label] = nil
+    else
+      while parent do
+        if parent == container then
+          marquees[label] = nil
+          break
+        end
+        local nextOk
+        nextOk, parent = pcall(parent.getParent, parent)
+        if not nextOk then
+          break
+        end
+      end
+    end
+  end
+end
+
+function ha.tickMarquees()
+  for label, entry in pairs(marquees) do
+    local length = #entry.text + #MARQUEE_GAP
+    if length > 0 then
+      entry.offset = (entry.offset + 1) % length
+      label:setText(marqueeWindow(entry.text, entry.width, entry.offset))
+    end
+  end
 end
 
 function ha.normLabel(value)
@@ -1805,7 +1899,7 @@ run({
       version = 1,
       id = os.getComputerID(),
       kind = "switch",
-      name = "Switch " .. tostring(os.getComputerID()),
+      name = "",
       side = "top",
       network = ha.DEFAULT_NETWORK,
       channel = ha.DEFAULT_CHANNEL,
@@ -2109,6 +2203,14 @@ local function startupConfigure()
     if choice then
       if startupWrite(choice.command) then
         print(string.format("Updated /startup.lua: shell.run(%q)", choice.command))
+        print("Startup changed; restarting computer...")
+        local rebooted = pcall(function()
+          os.sleep(1)
+          os.reboot()
+        end)
+        if not rebooted then
+          print("Could not restart automatically; reboot manually.")
+        end
       else
         print("Could not update /startup.lua.")
       end

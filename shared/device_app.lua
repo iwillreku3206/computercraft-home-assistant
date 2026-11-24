@@ -26,6 +26,13 @@ return function(spec)
   cfg.kind = spec.kind
   cfg.paired = type(cfg.paired) == "table" and cfg.paired or {}
   cfg.name = ha.safeText(cfg.name, 24)
+  local computerLabel = ""
+  if type(os.getComputerLabel) == "function" then
+    computerLabel = ha.safeText(os.getComputerLabel() or "", 24)
+  end
+  if cfg.name == "" or (computerLabel ~= "" and cfg.name == spec.defaultName) then
+    cfg.name = computerLabel ~= "" and computerLabel or (spec.defaultName or (spec.title .. " " .. tostring(cfg.id)))
+  end
   if cfg.name == "" then
     cfg.name = spec.defaultName or (spec.title .. " " .. tostring(cfg.id))
   end
@@ -312,7 +319,7 @@ return function(spec)
     if not main then
       return
     end
-    labels.name:setText(ha.fit(cfg.name, W - 2))
+    ha.marqueeLabel(labels.name, cfg.name, W - 2)
     labels.kind:setText(string.format("%s | side: %s", spec.kind, cfg.side))
     labels.net:setText(string.format("%s / ch %d", cfg.network, cfg.channel))
     labels.pair:setText(string.format(
@@ -674,6 +681,7 @@ return function(spec)
   ensureModem()
 
   local timer = os.startTimer(1)
+  local marqueeTimer = os.startTimer(0.25)
   local ticks = 0
 
   local function tick()
@@ -721,6 +729,9 @@ return function(spec)
       if p1 == timer then
         timer = os.startTimer(1)
         tick()
+      elseif p1 == marqueeTimer then
+        marqueeTimer = os.startTimer(0.25)
+        ha.tickMarquees()
       end
       return
     elseif event == "terminate" then

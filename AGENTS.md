@@ -44,7 +44,8 @@ Config files are runtime state and must never be embedded in installers:
 - `/ha/version`, `/ha/channel` — generated update metadata. Do not treat
   these as user config; rebuilds/installers own them.
 - `/ha/switch.cfg`, `/ha/dimmer.cfg` — per-device name, side, network, channel,
-  pairing-open flag, GPS flag, paired clients, last output state.
+  pairing-open flag, GPS flag, paired clients, last output state. A new device
+  name defaults to the computer label, then `Switch <id>` / `Dimmer <id>`.
 - `/ha/cache/widgets/<hash>.lua` — device-sent widget cache.
 
 ## Runtime constraints
@@ -93,6 +94,10 @@ Config files are runtime state and must never be embedded in installers:
   backgrounds for frames; the current UI was validated that way.
 - Real rendering and every overlay screen were smoke-tested under CraftOS-PC
   with Basalt 1.7.0. Preserve that coverage when changing UI structure.
+- Dynamic names must scroll instead of being permanently truncated. Use
+  `ha.marqueeLabel(label, text, width)` and call `ha.tickMarquees()` from a
+  ~0.25 s timer in the client and device event loops. Clear entries with
+  `ha.clearMarquee` / `ha.clearMarqueesIn` when cards or overlays are rebuilt.
 
 ## Protocol invariants
 
@@ -138,6 +143,9 @@ Config files are runtime state and must never be embedded in installers:
 - Startup choice `0` leaves `/startup.lua` unchanged. Otherwise insert/replace
   a single marked `shell.run(...)` block at the top while preserving all
   existing startup lines. Make repeat installs idempotent.
+- If a startup program is selected and `/startup.lua` is written successfully,
+  print the change and reboot the computer so the startup applies immediately.
+  Do not reboot for choice `0` or a failed write.
 - If stdin is unavailable, leave both label and startup unchanged.
 - `make check` syntax-checks `installers/startup.lua` and the embedded result.
 

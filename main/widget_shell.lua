@@ -51,7 +51,8 @@ function shell.buildCard(parent, spec)
     :setPosition(1, 1)
     :setSize(spec.w - 7, 1)
     :setForeground(colors.white)
-    :setText(ha.fit(spec.title or "", spec.w - 7))
+    :setText("")
+  ha.marqueeLabel(titleLabel, spec.title or "", spec.w - 7)
 
   local statusLabel = card:addLabel()
     :setPosition(spec.w - 5, 1)
@@ -89,7 +90,7 @@ function shell.buildCard(parent, spec)
   end
 
   function ctx:setTitle(text)
-    titleLabel:setText(ha.fit(text or "", spec.w - 7))
+    ha.marqueeLabel(titleLabel, text or "", spec.w - 7)
   end
 
   function ctx:setStatus(text, color)
@@ -177,7 +178,7 @@ function shell.buildCard(parent, spec)
   end
 
   function cardState:setTitle(text)
-    titleLabel:setText(ha.fit(text or "", spec.w - 7))
+    ha.marqueeLabel(titleLabel, text or "", spec.w - 7)
   end
 
   function cardState:setStatus(text, color)
@@ -186,6 +187,7 @@ function shell.buildCard(parent, spec)
   end
 
   function cardState:destroy()
+    ha.clearMarquee(titleLabel)
     card:remove()
   end
 

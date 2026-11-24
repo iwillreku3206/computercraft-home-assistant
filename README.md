@@ -79,8 +79,10 @@ At the end, the installer prompts for:
 
 The startup choice is inserted as a managed `shell.run(...)` block at the top
 of `/startup.lua`; existing startup content is preserved and the block is
-replaced safely on later installs. The menu is defined once in
-`installers/startup.lua` and embedded into every generated installer.
+replaced safely on later installs. If a startup program is selected, the
+installer restarts the computer so the new startup applies immediately. The
+menu is defined once in `installers/startup.lua` and embedded into every
+generated installer.
 
 Stable is the default channel. For the nightly build from `main`:
 
@@ -224,8 +226,9 @@ To update manually:
    **Setup > Updates** on the client).
 2. The installer prompts for an optional new computer label and startup
    program; blank label input and startup choice `0` leave them unchanged.
-3. Stop the old app if it is still running (Ctrl+T) and start it again:
-   `ha`, `switch`, or `dimmer`.
+3. If a startup program was selected, the installer restarts the computer and
+   the chosen app starts automatically. Otherwise stop the old app (Ctrl+T)
+   and start it again: `ha`, `switch`, or `dimmer`.
 
 Choose the installer for what changed:
 
@@ -261,7 +264,10 @@ automatic on pushes to `main`.
 ### 1. Configure each device
 
 Run `switch` or `dimmer`. The device screen shows its name, side, network,
-channel, modem state and redstone output.
+channel, modem state and redstone output. A new device name defaults to the
+computer label; if that is blank it falls back to `Switch <id>` or
+`Dimmer <id>`. Existing installs that still have the old auto-generated name
+adopt the computer label when one is set.
 
 Open **Configure** to set:
 
@@ -288,7 +294,8 @@ screen contains:
 - **Updates** — choose Stable or Nightly, check, and install updates.
 - **Refresh GPS** — re-locates the pocket.
 
-The client keeps a separate `/ha/client.cfg` per pocket computer. Favorites,
+Long device and group names scroll in card titles and detail views instead of
+being cut off. The client keeps a separate `/ha/client.cfg` per pocket computer. Favorites,
 labels, filters, groups and pairings are therefore per-user.
 
 ### 3. Pair and use

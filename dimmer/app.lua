@@ -16,7 +16,7 @@ run({
       version = 1,
       id = os.getComputerID(),
       kind = "dimmer",
-      name = "Dimmer " .. tostring(os.getComputerID()),
+      name = "",
       side = "top",
       network = ha.DEFAULT_NETWORK,
       channel = ha.DEFAULT_CHANNEL,
